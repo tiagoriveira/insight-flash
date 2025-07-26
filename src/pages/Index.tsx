@@ -206,15 +206,25 @@ const Button: React.FC<ButtonProps> = ({ children, className = '', variant = 'pr
 interface InsightCardProps {
     insight: Insight;
     onReview: (insight: Insight) => void;
+    onDelete: (id: string) => void;
 }
 
-const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview }) => {
+const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete }) => {
     const isOverdue = insight.nextReview < Date.now() && !insight.isMastered;
     
     return (
         <div className="bg-card p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 border border-border flex flex-col justify-between">
             <div>
-                <p className="text-card-foreground font-medium">{insight.content}</p>
+                <div className="flex justify-between items-start mb-2">
+                    <p className="text-card-foreground font-medium flex-1">{insight.content}</p>
+                    <button 
+                        onClick={() => onDelete(insight.id)}
+                        className="ml-2 p-1 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Deletar insight"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                </div>
                 {insight.note && <p className="text-sm text-muted-foreground mt-2 italic">"{insight.note}"</p>}
                 <div className="flex flex-wrap gap-2 mt-3">
                     {insight.tags?.map((tag) => (
@@ -298,9 +308,10 @@ interface DashboardProps {
     insights: Insight[];
     onReview: (insight: Insight) => void;
     onNavigate: (page: string) => void;
+    onDelete: (id: string) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('today');
 
@@ -359,7 +370,7 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate })
 
       {filteredInsights.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInsights.map((insight) => <InsightCard key={insight.id} insight={insight} onReview={onReview} />)}
+          {filteredInsights.map((insight) => <InsightCard key={insight.id} insight={insight} onReview={onReview} onDelete={onDelete} />)}
         </div>
       ) : (
         <div className="text-center py-16 px-6 bg-muted/50 rounded-lg">
@@ -979,6 +990,12 @@ export default function App() {
     setPage('review');
   }, []);
 
+  const handleDeleteInsight = useCallback((id: string) => {
+    if (confirm('Tem certeza que deseja deletar este insight?')) {
+      setInsights(prev => prev.filter(i => i.id !== id));
+    }
+  }, [setInsights]);
+
   const handleNavigate = (targetPage: string) => {
     if (targetPage === 'review') {
         const now = Date.now();
@@ -1008,7 +1025,7 @@ export default function App() {
       case 'settings':
         return <SettingsView insights={insights} onImport={setInsights} onClearData={() => setInsights([])} onBack={() => setPage('dashboard')} theme={theme} toggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} />;
       default:
-        return <Dashboard insights={insights} onReview={handleStartReview} onNavigate={handleNavigate} />;
+        return <Dashboard insights={insights} onReview={handleStartReview} onNavigate={handleNavigate} onDelete={handleDeleteInsight} />;
     }
   };
 
