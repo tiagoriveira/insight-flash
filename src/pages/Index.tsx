@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target } from 'lucide-react';
+import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
+import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 
 // --- TIPOS E CONSTANTES ---
 interface Insight {
@@ -104,53 +106,307 @@ function calculatePriority(insight: Insight): number {
   return (daysOverdue * 10) + (insight.reviewStage * -2) + (recencyBonus * 5);
 }
 
-// Função para gerar exercícios baseados no insight
-const generateExercises = (insight: Insight) => {
-  const words = insight.content.split(' ');
-  const exercises = [];
+// Função para verificar se um insight é elegível para exercícios (Sprint 1)
+const isEligibleForExercise = (insight: Insight): boolean => {
+  // insights com stage >= 2
+  if (insight.reviewStage < 2 && !insight.isMastered) return false;
+  
+  // que não tenham sido exercitados hoje
+  const now = Date.now();
+  const today = new Date(now).toDateString();
+  const lastExerciseDate = insight.lastExerciseDate ? new Date(insight.lastExerciseDate).toDateString() : null;
+  
+  return lastExerciseDate !== today;
+};
 
-  // Exercício de preenchimento de lacunas
-  if (words.length > 5) {
-    const keyWordIndex = Math.floor(Math.random() * words.length);
-    const keyWord = words[keyWordIndex];
-    if (keyWord.length > 3) {
-      const questionText = words.map((w, i) => i === keyWordIndex ? '______' : w).join(' ');
-      exercises.push({
-        type: 'fill-blank' as const,
-        question: questionText,
-        answer: keyWord.toLowerCase(),
-        insight: insight
-      });
-    }
+// Função para obter estatísticas de performance por insight (Sprint 4)
+const getPerformanceStats = (insight: Insight) => {
+  const exerciseHistory = insight.exerciseHistory || [];
+  
+  if (exerciseHistory.length === 0) {
+    return {
+      totalExercises: 0,
+      correctAnswers: 0,
+      accuracy: 0,
+      averageResponseTime: 0,
+      lastExerciseDate: null,
+      exercisesByType: {
+        'fill-blank': { total: 0, correct: 0 },
+        'multiple-choice': { total: 0, correct: 0 },
+        'open-answer': { total: 0, correct: 0 }
+      }
+    };
   }
-
-  // Exercício de múltipla escolha
-  if (insight.content.length > 50) {
-    const keywords = words.filter(w => w.length > 4);
-    if (keywords.length > 0) {
-      const correctAnswer = keywords[Math.floor(Math.random() * keywords.length)];
-      const wrongAnswers = ['conceito', 'processo', 'método'].filter(w => w !== correctAnswer.toLowerCase());
-      const options = [correctAnswer, ...wrongAnswers.slice(0, 2)].sort(() => Math.random() - 0.5);
-      
-      exercises.push({
-        type: 'multiple-choice' as const,
-        question: `Qual conceito é central neste insight: "${insight.content.substring(0, 80)}..."?`,
-        options: options,
-        answer: correctAnswer,
-        insight: insight
-      });
+  
+  const totalExercises = exerciseHistory.length;
+  const correctAnswers = exerciseHistory.filter(ex => ex.correct).length;
+  const accuracy = Math.round((correctAnswers / totalExercises) * 100);
+  
+  const exercisesByType = {
+    'fill-blank': { total: 0, correct: 0 },
+    'multiple-choice': { total: 0, correct: 0 },
+    'open-answer': { total: 0, correct: 0 }
+  };
+  
+  exerciseHistory.forEach(ex => {
+    if (exercisesByType[ex.type]) {
+      exercisesByType[ex.type].total++;
+      if (ex.correct) exercisesByType[ex.type].correct++;
     }
-  }
-
-  // Exercício de resposta aberta
-  exercises.push({
-    type: 'open-answer' as const,
-    question: `Explique com suas próprias palavras o conceito apresentado neste insight:`,
-    answer: insight.content,
-    insight: insight
   });
+  
+  return {
+    totalExercises,
+    correctAnswers,
+    accuracy,
+    averageResponseTime: 0, // TODO: implementar quando adicionar tempo de resposta
+    lastExerciseDate: insight.lastExerciseDate,
+    exercisesByType
+  };
+};
 
-  return exercises;
+// Função para gerar exercícios baseados no insight usando ExerciseEngine (Sprint 2)
+const generateExercises = (insight: Insight) => {
+  return ExerciseEngine.generateExercises({
+    id: insight.id,
+    content: insight.content,
+    note: insight.note,
+    source: insight.source,
+    tags: insight.tags
+  }).map(exercise => ({
+    ...exercise,
+    insight: insight
+  }));
+};
+
+// Função para gerar exercícios usando IA (Sprint 5)
+const generateExercisesWithAI = async (insight: Insight): Promise<Exercise[]> => {
+  const exerciseInsight = {
+    id: insight.id,
+    content: insight.content,
+    note: insight.note,
+    source: insight.source,
+    tags: insight.tags
+  };
+  
+  try {
+    const exercises: Exercise[] = [];
+    
+    // Tentar gerar exercício de preenchimento com IA
+    try {
+      const fillBlankExercise = await AIExerciseGenerator.getFillBlankQuestionFromIA(exerciseInsight);
+      exercises.push(fillBlankExercise);
+    } catch (error) {
+      console.warn('Falha ao gerar exercício de preenchimento com IA:', error);
+    }
+    
+    // Tentar gerar exercício de múltipla escolha com IA
+    try {
+      const multipleChoiceExercise = await AIExerciseGenerator.getMultipleChoiceFromIA(exerciseInsight);
+      exercises.push(multipleChoiceExercise);
+    } catch (error) {
+      console.warn('Falha ao gerar exercício de múltipla escolha com IA:', error);
+    }
+    
+    // Se a IA falhou, usar o gerador padrão como fallback
+    if (exercises.length === 0) {
+      return generateExercises(insight);
+    }
+    
+    // Adicionar exercício de resposta aberta usando o gerador padrão
+    const standardExercises = generateExercises(insight);
+    const openAnswerExercise = standardExercises.find(ex => ex.type === 'open-answer');
+    if (openAnswerExercise) {
+      exercises.push(openAnswerExercise);
+    }
+    
+    return exercises;
+  } catch (error) {
+    console.error('Erro ao gerar exercícios com IA:', error);
+    // Fallback para gerador padrão
+    return generateExercises(insight);
+  }
+};
+
+// Componente de Configurações de Exercícios (Sprint 6)
+const ExerciseSettings: React.FC = () => {
+  const [useAI, setUseAI] = useLocalStorage('exerciseSettings_useAI', false);
+  const [maxExercisesPerSession, setMaxExercisesPerSession] = useLocalStorage('exerciseSettings_maxPerSession', 5);
+  const [maxExercisesPerDay, setMaxExercisesPerDay] = useLocalStorage('exerciseSettings_maxPerDay', 3);
+  const [enabledExerciseTypes, setEnabledExerciseTypes] = useLocalStorage('exerciseSettings_enabledTypes', {
+    'fill-blank': true,
+    'multiple-choice': true,
+    'open-answer': true
+  });
+  const [difficultyLevel, setDifficultyLevel] = useLocalStorage('exerciseSettings_difficulty', 'medium');
+  const [autoAdvance, setAutoAdvance] = useLocalStorage('exerciseSettings_autoAdvance', false);
+
+  const handleExerciseTypeToggle = (type: string) => {
+    setEnabledExerciseTypes(prev => ({
+      ...prev,
+      [type]: !prev[type]
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Configuração de IA */}
+      <div className="flex justify-between items-center">
+        <div>
+          <span className="text-foreground font-medium">Usar Geração com IA</span>
+          <p className="text-sm text-muted-foreground">Exercícios mais inteligentes e contextuais</p>
+        </div>
+        <button
+          onClick={() => setUseAI(!useAI)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            useAI ? 'bg-primary' : 'bg-muted'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              useAI ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Limite de exercícios por sessão */}
+      <div>
+        <label className="block text-foreground font-medium mb-2">
+          Exercícios por Sessão: {maxExercisesPerSession}
+        </label>
+        <input
+          type="range"
+          min="1"
+          max="10"
+          value={maxExercisesPerSession}
+          onChange={(e) => setMaxExercisesPerSession(Number(e.target.value))}
+          className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+        />
+        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+          <span>1</span>
+          <span>10</span>
+        </div>
+      </div>
+
+      {/* Limite de exercícios por dia */}
+      <div>
+        <label className="block text-foreground font-medium mb-2">
+          Exercícios por Dia (por insight): {maxExercisesPerDay}
+        </label>
+        <input
+          type="range"
+          min="1"
+          max="5"
+          value={maxExercisesPerDay}
+          onChange={(e) => setMaxExercisesPerDay(Number(e.target.value))}
+          className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+        />
+        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+          <span>1</span>
+          <span>5</span>
+        </div>
+      </div>
+
+      {/* Tipos de exercícios habilitados */}
+      <div>
+        <label className="block text-foreground font-medium mb-3">Tipos de Exercícios</label>
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Preenchimento de Lacunas</span>
+            <button
+              onClick={() => handleExerciseTypeToggle('fill-blank')}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                enabledExerciseTypes['fill-blank'] ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  enabledExerciseTypes['fill-blank'] ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Múltipla Escolha</span>
+            <button
+              onClick={() => handleExerciseTypeToggle('multiple-choice')}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                enabledExerciseTypes['multiple-choice'] ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  enabledExerciseTypes['multiple-choice'] ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Resposta Aberta</span>
+            <button
+              onClick={() => handleExerciseTypeToggle('open-answer')}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                enabledExerciseTypes['open-answer'] ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  enabledExerciseTypes['open-answer'] ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Nível de dificuldade */}
+      <div>
+        <label className="block text-foreground font-medium mb-3">Nível de Dificuldade</label>
+        <div className="grid grid-cols-3 gap-2">
+          {['easy', 'medium', 'hard'].map((level) => (
+            <button
+              key={level}
+              onClick={() => setDifficultyLevel(level)}
+              className={`p-2 rounded-lg text-sm font-medium transition-colors ${
+                difficultyLevel === level
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {level === 'easy' ? 'Fácil' : level === 'medium' ? 'Médio' : 'Difícil'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Avanço automático */}
+      <div className="flex justify-between items-center">
+        <div>
+          <span className="text-foreground font-medium">Avanço Automático</span>
+          <p className="text-sm text-muted-foreground">Avançar automaticamente após resposta correta</p>
+        </div>
+        <button
+          onClick={() => setAutoAdvance(!autoAdvance)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            autoAdvance ? 'bg-primary' : 'bg-muted'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              autoAdvance ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="pt-4 border-t border-border">
+        <p className="text-xs text-muted-foreground">
+          💡 Dica: As configurações são salvas automaticamente e aplicadas na próxima sessão de exercícios.
+        </p>
+      </div>
+    </div>
+  );
 };
 
 // --- COMPONENTES DA UI ---
@@ -615,6 +871,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ insights, onImport, onClear
                         </div>
                     </div>
                     <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
+                        <h3 className="text-lg font-semibold text-foreground mb-4">Configurações de Exercícios</h3>
+                        <ExerciseSettings />
+                    </div>
+                    <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
                         <h3 className="text-lg font-semibold text-foreground mb-2">Métricas</h3>
                         <AdvancedMetrics insights={insights} />
                     </div>
@@ -637,13 +897,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ insights, onImport, onClear
 };
 
 // --- NOVO COMPONENTE: PRACTICE VIEW ---
-interface Exercise {
-    type: 'fill-blank' | 'multiple-choice' | 'open-answer';
-    question: string;
-    answer: string;
-    options?: string[];
-    insight: Insight;
-}
 
 interface PracticeViewProps {
     insights: Insight[];
@@ -660,28 +913,17 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
 
     useKeyPress('Escape', onBack);
 
-    // Filtrar insights elegíveis para exercícios
+    // Filtrar insights elegíveis para exercícios usando a função isEligibleForExercise (Sprint 1)
     const eligibleInsights = useMemo(() => {
-        const now = Date.now();
-        const today = new Date(now).getDate();
-        
-        return insights.filter(insight => {
-            // Apenas insights em estágio >= 2 ou dominados
-            if (insight.reviewStage < 2 && !insight.isMastered) return false;
-            
-            // Limitar a 3 exercícios por insight por dia
-            const lastExerciseDate = insight.lastExerciseDate ? new Date(insight.lastExerciseDate).getDate() : 0;
-            const exercisesToday = insight.exerciseHistory?.filter(ex => 
-                new Date(ex.timestamp).getDate() === today
-            ).length || 0;
-            
-            return lastExerciseDate !== today || exercisesToday < 3;
-        }).sort((a, b) => {
-            // Ordenar por tempo desde última prática
-            const aLastExercise = a.lastExerciseDate || 0;
-            const bLastExercise = b.lastExerciseDate || 0;
-            return aLastExercise - bLastExercise;
-        });
+        return insights
+            .filter(insight => isEligibleForExercise(insight))
+            .sort((a, b) => {
+                // Ordenar por tempo desde última prática
+                const aLastExercise = a.lastExerciseDate || 0;
+                const bLastExercise = b.lastExerciseDate || 0;
+                return aLastExercise - bLastExercise;
+            })
+            .slice(0, 5); // Selecionar máximo 5 insights elegíveis por sessão
     }, [insights]);
 
     // Gerar exercícios para a sessão
@@ -700,7 +942,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
     const handleNext = () => {
         if (!currentExercise) return;
 
-        const isCorrect = userAnswer.toLowerCase().trim() === currentExercise.answer.toLowerCase().trim();
+        const isCorrect = userAnswer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim();
         
         // Registrar resultado
         setSessionResults(prev => [...prev, { correct: isCorrect, exercise: currentExercise }]);
@@ -835,7 +1077,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
 
                 {/* Pergunta */}
                 <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">{currentExercise.question}</h3>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">{currentExercise.prompt}</h3>
 
                     {/* Diferentes tipos de exercício */}
                     {currentExercise.type === 'fill-blank' && (
@@ -884,14 +1126,14 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
                 {showAnswer ? (
                     <div className="space-y-4">
                         <div className={`p-4 rounded-lg border-l-4 ${
-                            userAnswer.toLowerCase().trim() === currentExercise.answer.toLowerCase().trim()
+                            userAnswer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim()
                                 ? 'bg-success/10 border-success text-success'
                                 : 'bg-destructive/10 border-destructive text-destructive'
                         }`}>
                             <p className="font-semibold mb-1">
-                                {userAnswer.toLowerCase().trim() === currentExercise.answer.toLowerCase().trim() ? '✅ Correto!' : '❌ Não foi dessa vez'}
+                                {userAnswer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim() ? '✅ Correto!' : '❌ Não foi dessa vez'}
                             </p>
-                            <p>Resposta: {currentExercise.answer}</p>
+                            <p>Resposta: {currentExercise.correctAnswer}</p>
                         </div>
                         <Button onClick={handleNext} variant="primary" className="w-full">
                             {currentExerciseIndex < exercises.length - 1 ? 'Próximo Exercício' : 'Finalizar Sessão'}
