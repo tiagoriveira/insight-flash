@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target } from 'lucide-react';
+import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target, Volume2, VolumeX } from 'lucide-react';
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 
@@ -23,6 +23,8 @@ interface Insight {
     type: 'fill-blank' | 'multiple-choice' | 'open-answer';
     correct?: boolean;
   }>;
+  // Campo para áudio
+  audioEnabled?: boolean;
 }
 
 const REVIEW_INTERVALS = [1, 3, 7, 21];
@@ -409,7 +411,53 @@ const ExerciseSettings: React.FC = () => {
   );
 };
 
-// --- COMPONENTES DA UI ---
+// Componente de Áudio (Sprint 7)
+interface AudioPlayerProps {
+  text: string;
+  enabled?: boolean;
+}
+
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, enabled = true }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
+
+  useEffect(() => {
+    setIsSupported('speechSynthesis' in window);
+  }, []);
+
+  const playAudio = () => {
+    if (!isSupported || !enabled) return;
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pt-BR';
+    utterance.rate = 0.9;
+    
+    utterance.onstart = () => setIsPlaying(true);
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => setIsPlaying(false);
+    
+    speechSynthesis.speak(utterance);
+  };
+
+  const stopAudio = () => {
+    speechSynthesis.cancel();
+    setIsPlaying(false);
+  };
+
+  if (!isSupported || !enabled) return null;
+
+  return (
+    <button
+      onClick={isPlaying ? stopAudio : playAudio}
+      className="p-2 rounded-full hover:bg-muted transition-colors"
+      title={isPlaying ? 'Parar áudio' : 'Reproduzir áudio'}
+    >
+      {isPlaying ? <VolumeX size={16} /> : <Volume2 size={16} />}
+    </button>
+  );
+};
+
+// --- COMPONENTES DE UI ---
 interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -473,13 +521,16 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete }
             <div>
                 <div className="flex justify-between items-start mb-2">
                     <p className="text-card-foreground font-medium flex-1">{insight.content}</p>
-                    <button 
-                        onClick={() => onDelete(insight.id)}
-                        className="ml-2 p-1 text-muted-foreground hover:text-destructive transition-colors"
-                        title="Deletar insight"
-                    >
-                        <Trash2 size={16} />
-                    </button>
+                    <div className="flex items-center ml-2">
+                        {insight.audioEnabled && <AudioPlayer text={insight.content} />}
+                        <button 
+                            onClick={() => onDelete(insight.id)}
+                            className="ml-2 p-1 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Deletar insight"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
                 </div>
                 {insight.note && <p className="text-sm text-muted-foreground mt-2 italic">"{insight.note}"</p>}
                 <div className="flex flex-wrap gap-2 mt-3">
@@ -506,7 +557,7 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete }
 
 // --- TELAS PRINCIPAIS ---
 interface AddInsightFormProps {
-    onAddInsight: (data: { content: string; note: string; source: string; tags: string[] }) => void;
+    onAddInsight: (data: { content: string; note: string; source: string; tags: string[]; audioEnabled?: boolean }) => void;
     onBack: () => void;
 }
 
@@ -515,6 +566,7 @@ const AddInsightForm: React.FC<AddInsightFormProps> = ({ onAddInsight, onBack })
   const [note, setNote] = useState('');
   const [source, setSource] = useState('');
   const [tags, setTags] = useState('');
+  const [audioEnabled, setAudioEnabled] = useState(false);
   
   useKeyPress('Escape', onBack);
 
@@ -523,8 +575,8 @@ const AddInsightForm: React.FC<AddInsightFormProps> = ({ onAddInsight, onBack })
     if (content.length < 10) return;
     
     const tagsArray = tags.split(',').map(t => t.trim()).filter(Boolean);
-    onAddInsight({ content, note, source, tags: tagsArray });
-    setContent(''); setNote(''); setSource(''); setTags('');
+    onAddInsight({ content, note, source, tags: tagsArray, audioEnabled });
+    setContent(''); setNote(''); setSource(''); setTags(''); setAudioEnabled(false);
   };
 
   return (
@@ -549,6 +601,12 @@ const AddInsightForm: React.FC<AddInsightFormProps> = ({ onAddInsight, onBack })
         <div>
           <label htmlFor="source" className="block text-sm font-medium text-foreground mb-1">URL da Fonte</label>
           <input id="source" type="url" value={source} onChange={(e) => setSource(e.target.value)} placeholder="https://exemplo.com/artigo" className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150" />
+        </div>
+        <div className="flex items-center space-x-2">
+          <input id="audioEnabled" type="checkbox" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} className="rounded border-border" />
+          <label htmlFor="audioEnabled" className="text-sm font-medium text-foreground flex items-center">
+            <Volume2 size={16} className="mr-1" /> Habilitar áudio
+          </label>
         </div>
         <div className="flex justify-end pt-2">
           <Button type="submit" variant="primary" disabled={content.length < 10}>
@@ -682,7 +740,10 @@ const ReviewView: React.FC<ReviewViewProps> = ({ insight, onUpdateInsight, onBac
     <div className="animate-fade-in max-w-2xl mx-auto">
       <div className="flex items-center mb-6"><button onClick={onBack} className="p-2 rounded-full hover:bg-muted mr-4"><ArrowLeft /></button><h2 className="text-2xl font-bold text-foreground">Modo de Revisão</h2></div>
       <div className="bg-card p-6 sm:p-8 rounded-lg shadow-lg border border-border">
-        <p className="text-lg md:text-xl text-card-foreground leading-relaxed">{insight.content}</p>
+        <div className="flex justify-between items-start mb-4">
+          <p className="text-lg md:text-xl text-card-foreground leading-relaxed flex-1">{insight.content}</p>
+          {insight.audioEnabled && <AudioPlayer text={insight.content} />}
+        </div>
         {insight.note && <div className="mt-6 p-4 bg-warning/10 border-l-4 border-warning rounded"><p className="text-sm font-semibold text-warning mb-1">Sua nota:</p><p className="text-foreground italic">"{insight.note}"</p></div>}
         <div className="text-xs text-muted-foreground border-t border-border pt-4 mt-6">
           <p>Adicionado em: {formatDate(insight.timestamp)}</p>
@@ -1193,7 +1254,7 @@ export default function App() {
     }).length;
   }, [insights]);
 
-  const handleAddInsight = useCallback(({ content, note, source, tags }: { content: string; note: string; source: string; tags: string[] }) => {
+  const handleAddInsight = useCallback(({ content, note, source, tags, audioEnabled }: { content: string; note: string; source: string; tags: string[]; audioEnabled?: boolean }) => {
     const now = Date.now();
     const newInsight: Insight = {
       id: crypto.randomUUID(),
@@ -1204,7 +1265,8 @@ export default function App() {
       isMastered: false,
       reviewHistory: [{ timestamp: now, action: 'created' }],
       exerciseEnabled: false,
-      exerciseHistory: []
+      exerciseHistory: [],
+      audioEnabled: audioEnabled || false
     };
     setInsights(prev => [...prev, newInsight]);
     setPage('dashboard');
