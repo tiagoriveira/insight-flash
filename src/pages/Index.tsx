@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target, Volume2, VolumeX } from 'lucide-react';
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
+import { useFirestore } from '../hooks/useFirestore';
 
 // --- TIPOS E CONSTANTES ---
 interface Insight {
@@ -31,34 +32,10 @@ const REVIEW_INTERVALS = [1, 3, 7, 21];
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 // --- HOOKS CUSTOMIZADOS ---
-function useLocalStorage<T>(key: string, initialValue: T) {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    if (typeof window === 'undefined') return initialValue;
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
-      return initialValue;
-    }
-  });
 
-  const setValue: React.Dispatch<React.SetStateAction<T>> = (value) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
-      }
-    } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
-    }
-  };
-  return [storedValue, setValue] as const;
-}
 
 function useDarkMode() {
-    const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('theme', 'light');
+    const [theme, setTheme] = useFirestore<'light' | 'dark'>('theme', 'light');
 
     useEffect(() => {
         const root = window.document.documentElement;
@@ -232,16 +209,16 @@ const generateExercisesWithAI = async (insight: Insight): Promise<Exercise[]> =>
 
 // Componente de Configurações de Exercícios (Sprint 6)
 const ExerciseSettings: React.FC = () => {
-  const [useAI, setUseAI] = useLocalStorage('exerciseSettings_useAI', false);
-  const [maxExercisesPerSession, setMaxExercisesPerSession] = useLocalStorage('exerciseSettings_maxPerSession', 5);
-  const [maxExercisesPerDay, setMaxExercisesPerDay] = useLocalStorage('exerciseSettings_maxPerDay', 3);
-  const [enabledExerciseTypes, setEnabledExerciseTypes] = useLocalStorage('exerciseSettings_enabledTypes', {
+  const [useAI, setUseAI] = useFirestore('exerciseSettings_useAI', false);
+  const [maxExercisesPerSession, setMaxExercisesPerSession] = useFirestore('exerciseSettings_maxPerSession', 5);
+  const [maxExercisesPerDay, setMaxExercisesPerDay] = useFirestore('exerciseSettings_maxPerDay', 3);
+  const [enabledExerciseTypes, setEnabledExerciseTypes] = useFirestore('exerciseSettings_enabledTypes', {
     'fill-blank': true,
     'multiple-choice': true,
     'open-answer': true
   });
-  const [difficultyLevel, setDifficultyLevel] = useLocalStorage('exerciseSettings_difficulty', 'medium');
-  const [autoAdvance, setAutoAdvance] = useLocalStorage('exerciseSettings_autoAdvance', false);
+  const [difficultyLevel, setDifficultyLevel] = useFirestore('exerciseSettings_difficulty', 'medium');
+  const [autoAdvance, setAutoAdvance] = useFirestore('exerciseSettings_autoAdvance', false);
 
   const handleExerciseTypeToggle = (type: string) => {
     setEnabledExerciseTypes(prev => ({
@@ -1228,7 +1205,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
 
 // --- COMPONENTE PRINCIPAL DA APLICAÇÃO ---
 export default function App() {
-  const [insights, setInsights] = useLocalStorage<Insight[]>('clipAndReview_insights', []);
+  const [insights, setInsights, insightsLoading] = useFirestore<Insight[]>('clipAndReview_insights', []);
   const [page, setPage] = useState('dashboard');
   const [reviewingInsight, setReviewingInsight] = useState<Insight | null>(null);
   const [theme, setTheme] = useDarkMode();
@@ -1317,6 +1294,18 @@ export default function App() {
         setPage(targetPage);
     }
   };
+
+  // Mostrar loading enquanto carrega dados do Firestore
+  if (insightsLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Carregando seus dados...</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderPage = () => {
     switch (page) {
