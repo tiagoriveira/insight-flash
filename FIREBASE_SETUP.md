@@ -68,3 +68,57 @@ service cloud.firestore {
 ## Desenvolvimento Local
 
 O app funciona com configurações demo mesmo sem Firebase configurado, mas os dados ficam apenas localmente.
+
+---
+
+## **Como sincronizar dados do usuário entre dispositivos (Firebase Auth + Firestore)**
+
+### 1. **Ative um método de login no Firebase**
+- Vá para [Firebase Console > Authentication > Métodos de login](https://console.firebase.google.com/)
+- Ative pelo menos um método (ex: Google, E-mail/senha)
+
+---
+
+### 2. **Adicione tela de login na sua aplicação**
+- Implemente um formulário de login (Google ou E-mail/senha)
+- Use os métodos do Firebase Auth, por exemplo:
+  ```js
+  import { getAuth, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+  const auth = getAuth();
+
+  // Para login com Google:
+  const provider = new GoogleAuthProvider();
+  signInWithPopup(auth, provider);
+
+  // Para login com e-mail/senha:
+  signInWithEmailAndPassword(auth, email, password);
+  ```
+
+---
+
+### 3. **Salve e recupere dados usando o UID do usuário**
+- Ao salvar dados no Firestore, use o `auth.currentUser.uid` como identificador:
+  ```js
+  import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+  const db = getFirestore();
+
+  // Salvar dados
+  await setDoc(doc(db, "users", auth.currentUser.uid, "dados", "meuDado"), { ... });
+
+  // Ler dados
+  const docSnap = await getDoc(doc(db, "users", auth.currentUser.uid, "dados", "meuDado"));
+  ```
+
+---
+
+### 4. **Oriente o usuário**
+- Peça para ele sempre fazer login com a mesma conta em todos os dispositivos.
+
+---
+
+### 5. **Pronto!**
+- Agora, ao logar em qualquer dispositivo, o usuário verá sempre os próprios dados.
+
+---
+
+Se quiser um exemplo de código para React ou outra stack, só pedir!

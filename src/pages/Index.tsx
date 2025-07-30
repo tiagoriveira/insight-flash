@@ -3,6 +3,8 @@ import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, 
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 import { useFirestore } from '../hooks/useFirestore';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import app from '../lib/firebase';
 
 // --- TIPOS E CONSTANTES ---
 interface Insight {
@@ -1205,10 +1207,37 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
 
 // --- COMPONENTE PRINCIPAL DA APLICAÇÃO ---
 export default function App() {
+  const auth = getAuth(app);
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  
   const [insights, setInsights, insightsLoading] = useFirestore<Insight[]>('clipAndReview_insights', []);
   const [page, setPage] = useState('dashboard');
   const [reviewingInsight, setReviewingInsight] = useState<Insight | null>(null);
   const [theme, setTheme] = useDarkMode();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErro("");
+    try {
+      await signInWithEmailAndPassword(auth, email, senha);
+      setEmail("");
+      setSenha("");
+    } catch (err: any) {
+      setErro("Usuário ou senha inválidos");
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
 
   const insightsToReviewCount = useMemo(() => {
     const now = Date.now();
@@ -1295,6 +1324,35 @@ export default function App() {
     }
   };
 
+  // Tela de login se usuário não estiver autenticado
+  if (!user) {
+    return (
+      <div style={{ minHeight: "100vh" }} className="flex flex-col items-center justify-center bg-background">
+        <form onSubmit={handleLogin} className="bg-card p-6 rounded shadow flex flex-col gap-3 w-80">
+          <h2 className="text-xl font-bold mb-2">Entrar</h2>
+          <input
+            type="email"
+            placeholder="E-mail"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="p-2 border rounded"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Senha"
+            value={senha}
+            onChange={e => setSenha(e.target.value)}
+            className="p-2 border rounded"
+            required
+          />
+          {erro && <div className="text-red-500 text-sm">{erro}</div>}
+          <button type="submit" className="bg-primary text-white p-2 rounded">Entrar</button>
+        </form>
+      </div>
+    );
+  }
+
   // Mostrar loading enquanto carrega dados do Firestore
   if (insightsLoading) {
     return (
@@ -1346,6 +1404,10 @@ export default function App() {
               <span className="sr-only">Toggle theme</span>
               {theme === 'dark' ? <Sun /> : <Moon />}
             </button>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-muted-foreground">{user?.email}</span>
+              <button onClick={handleLogout} className="text-xs bg-destructive text-white px-2 py-1 rounded">Sair</button>
+            </div>
           </div>
         </nav>
       </header>
@@ -1361,6 +1423,10 @@ export default function App() {
         </div>
         <NavButtonMobile label="Revisar" icon={<BookOpen />} active={page === 'review'} onClick={() => handleNavigate('review')} />
         <NavButtonMobile label="Ajustes" icon={<Settings />} active={page === 'settings'} onClick={() => handleNavigate('settings')} />
+        <button onClick={handleLogout} className="flex flex-col items-center justify-center text-xs w-20 h-14 rounded-lg transition-colors text-destructive">
+          <span className="text-lg">👤</span>
+          <span>Sair</span>
+        </button>
       </footer>
        <div className="h-24 md:hidden"></div>
     </div>
