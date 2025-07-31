@@ -3,7 +3,7 @@ import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, 
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 import { useFirestore } from '../hooks/useFirestore';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import app from '../lib/firebase';
 
 // --- TIPOS E CONSTANTES ---
@@ -1212,6 +1212,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
   
   const [insights, setInsights, insightsLoading] = useFirestore<Insight[]>('clipAndReview_insights', []);
   const [page, setPage] = useState('dashboard');
@@ -1227,11 +1228,19 @@ export default function App() {
     e.preventDefault();
     setErro("");
     try {
-      await signInWithEmailAndPassword(auth, email, senha);
+      if (isSignUp) {
+        await createUserWithEmailAndPassword(auth, email, senha);
+      } else {
+        await signInWithEmailAndPassword(auth, email, senha);
+      }
       setEmail("");
       setSenha("");
     } catch (err: any) {
-      setErro("Usuário ou senha inválidos");
+      if (isSignUp) {
+        setErro("Erro ao criar conta. Verifique os dados ou se a conta já existe.");
+      } else {
+        setErro("E-mail ou senha inválidos");
+      }
     }
   };
 
@@ -1324,31 +1333,75 @@ export default function App() {
     }
   };
 
-  // Tela de login se usuário não estiver autenticado
+  // Tela de login/cadastro se usuário não estiver autenticado
   if (!user) {
     return (
       <div style={{ minHeight: "100vh" }} className="flex flex-col items-center justify-center bg-background">
-        <form onSubmit={handleLogin} className="bg-card p-6 rounded shadow flex flex-col gap-3 w-80">
-          <h2 className="text-xl font-bold mb-2">Entrar</h2>
-          <input
-            type="email"
-            placeholder="E-mail"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="p-2 border rounded"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            value={senha}
-            onChange={e => setSenha(e.target.value)}
-            className="p-2 border rounded"
-            required
-          />
-          {erro && <div className="text-red-500 text-sm">{erro}</div>}
-          <button type="submit" className="bg-primary text-white p-2 rounded">Entrar</button>
-        </form>
+        <div className="bg-card p-6 rounded-lg shadow-lg border border-border w-80">
+          <div className="flex mb-4">
+            <button
+              onClick={() => setIsSignUp(false)}
+              className={`flex-1 p-2 text-center border-b-2 ${
+                !isSignUp ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
+              }`}
+            >
+              Entrar
+            </button>
+            <button
+              onClick={() => setIsSignUp(true)}
+              className={`flex-1 p-2 text-center border-b-2 ${
+                isSignUp ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
+              }`}
+            >
+              Cadastrar
+            </button>
+          </div>
+          
+          <form onSubmit={handleLogin} className="flex flex-col gap-3">
+            <h2 className="text-xl font-bold mb-2 text-foreground">
+              {isSignUp ? 'Criar Conta' : 'Entrar'}
+            </h2>
+            <input
+              type="email"
+              placeholder="E-mail"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+              required
+            />
+            <input
+              type="password"
+              placeholder={isSignUp ? "Senha (mínimo 6 caracteres)" : "Senha"}
+              value={senha}
+              onChange={e => setSenha(e.target.value)}
+              className="p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+              required
+              minLength={isSignUp ? 6 : undefined}
+            />
+            {erro && <div className="text-destructive text-sm bg-destructive/10 p-2 rounded">{erro}</div>}
+            <button 
+              type="submit" 
+              className="bg-primary hover:bg-primary/90 text-primary-foreground p-3 rounded-lg font-medium transition-colors"
+            >
+              {isSignUp ? 'Criar Conta' : 'Entrar'}
+            </button>
+          </form>
+          
+          <div className="mt-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}
+              <button
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setErro("");
+                }}
+                className="ml-1 text-primary hover:underline"
+              >
+                {isSignUp ? 'Entrar' : 'Cadastrar'}
+              </button>
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
