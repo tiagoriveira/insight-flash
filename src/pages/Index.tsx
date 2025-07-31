@@ -3,7 +3,7 @@ import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, 
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 import { useFirestore } from '../hooks/useFirestore';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User, setPersistence, browserSessionPersistence, browserLocalPersistence } from 'firebase/auth';
 import app from '../lib/firebase';
 
 // --- TIPOS E CONSTANTES ---
@@ -1213,6 +1213,7 @@ export default function App() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+  const [manterConectado, setManterConectado] = useState(true);
   
   const [insights, setInsights, insightsLoading] = useFirestore<Insight[]>('clipAndReview_insights', []);
   const [page, setPage] = useState('dashboard');
@@ -1228,6 +1229,9 @@ export default function App() {
     e.preventDefault();
     setErro("");
     try {
+      // Configurar persistência baseada na escolha do usuário
+      await setPersistence(auth, manterConectado ? browserLocalPersistence : browserSessionPersistence);
+      
       if (isSignUp) {
         await createUserWithEmailAndPassword(auth, email, senha);
       } else {
@@ -1236,10 +1240,40 @@ export default function App() {
       setEmail("");
       setSenha("");
     } catch (err: any) {
+      console.error("Erro de autenticação:", err);
+      
+      // Tratamento específico de erros
       if (isSignUp) {
-        setErro("Erro ao criar conta. Verifique os dados ou se a conta já existe.");
+        switch (err.code) {
+          case 'auth/email-already-in-use':
+            setErro("Este e-mail já está em uso. Tente fazer login ou use outro e-mail.");
+            break;
+          case 'auth/weak-password':
+            setErro("A senha deve ter pelo menos 6 caracteres.");
+            break;
+          case 'auth/invalid-email':
+            setErro("E-mail inválido. Verifique o formato.");
+            break;
+          default:
+            setErro("Erro ao criar conta. Verifique os dados e tente novamente.");
+        }
       } else {
-        setErro("E-mail ou senha inválidos");
+        switch (err.code) {
+          case 'auth/user-not-found':
+            setErro("Usuário não encontrado. Verifique o e-mail ou crie uma conta.");
+            break;
+          case 'auth/wrong-password':
+            setErro("Senha incorreta. Tente novamente.");
+            break;
+          case 'auth/invalid-email':
+            setErro("E-mail inválido. Verifique o formato.");
+            break;
+          case 'auth/too-many-requests':
+            setErro("Muitas tentativas. Tente novamente em alguns minutos.");
+            break;
+          default:
+            setErro("E-mail ou senha inválidos. Verifique os dados.");
+        }
       }
     }
   };
@@ -1247,10 +1281,31 @@ export default function App() {
   const handleGoogleLogin = async () => {
     setErro("");
     try {
+      // Configurar persistência baseada na escolha do usuário
+      await setPersistence(auth, manterConectado ? browserLocalPersistence : browserSessionPersistence);
+      
       const provider = new GoogleAuthProvider();
+      // Adicionar escopos para melhor acesso (opcional)
+      provider.addScope('profile');
+      provider.addScope('email');
+      
       await signInWithPopup(auth, provider);
     } catch (err: any) {
-      setErro("Erro ao fazer login com Google. Tente novamente.");
+      console.error("Erro de login com Google:", err);
+      
+      switch (err.code) {
+        case 'auth/popup-closed-by-user':
+          setErro("Login cancelado. A janela foi fechada.");
+          break;
+        case 'auth/popup-blocked':
+          setErro("Pop-up bloqueado pelo navegador. Permita pop-ups e tente novamente.");
+          break;
+        case 'auth/account-exists-with-different-credential':
+          setErro("Este e-mail já está em uso com outro método de login.");
+          break;
+        default:
+          setErro("Erro ao fazer login com Google. Tente novamente.");
+      }
     }
   };
 
@@ -1388,6 +1443,20 @@ export default function App() {
               required
               minLength={isSignUp ? 6 : undefined}
             />
+            
+            <div className="flex items-center space-x-2 my-1">
+              <input
+                type="checkbox"
+                id="manterConectado"
+                checked={manterConectado}
+                onChange={e => setManterConectado(e.target.checked)}
+                className="rounded border-border"
+              />
+              <label htmlFor="manterConectado" className="text-sm text-muted-foreground">
+                Manter conectado
+              </label>
+            </div>
+            
             {erro && <div className="text-destructive text-sm bg-destructive/10 p-2 rounded">{erro}</div>}
             <button 
               type="submit" 
