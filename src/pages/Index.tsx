@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target, Volume2, VolumeX } from 'lucide-react';
+import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target, Volume2, VolumeX, Edit2, Check, X } from 'lucide-react';
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 import { useFirestore } from '../hooks/useFirestore';
@@ -490,46 +490,126 @@ interface InsightCardProps {
     insight: Insight;
     onReview: (insight: Insight) => void;
     onDelete: (id: string) => void;
+    onUpdate: (id: string, updates: Partial<Insight>) => void;
 }
 
-const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete }) => {
+const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, onUpdate }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editContent, setEditContent] = useState(insight.content);
+    const [editNote, setEditNote] = useState(insight.note || '');
+    const [editSource, setEditSource] = useState(insight.source || '');
     const isOverdue = insight.nextReview < Date.now() && !insight.isMastered;
     
+    const handleSave = () => {
+        onUpdate(insight.id, {
+            content: editContent.trim(),
+            note: editNote.trim(),
+            source: editSource.trim()
+        });
+        setIsEditing(false);
+    };
+
+    const handleCancel = () => {
+        setEditContent(insight.content);
+        setEditNote(insight.note || '');
+        setEditSource(insight.source || '');
+        setIsEditing(false);
+    };
+    
     return (
-        <div className="bg-card p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 border border-border flex flex-col justify-between">
-            <div>
-                <div className="flex justify-between items-start mb-2">
-                    <p className="text-card-foreground font-medium flex-1">{insight.content}</p>
-                    <div className="flex items-center ml-2">
-                        {insight.audioEnabled && <AudioPlayer text={insight.content} />}
+        <div className="bg-card p-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-border">
+            <div className="flex justify-between items-start mb-3">
+                <div className="flex-1 mr-3">
+                    {isEditing ? (
+                        <textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            placeholder="Capture aqui uma ideia, um fato ou um conceito importante..."
+                            className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+                            rows={5}
+                            autoFocus
+                            required
+                        />
+                    ) : (
+                        <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors" 
+                           onClick={() => setIsEditing(true)}>
+                            {insight.content}
+                        </p>
+                    )}
+                </div>
+                <div className="flex items-center gap-1">
+                    {insight.audioEnabled && <AudioPlayer text={insight.content} />}
+                    {!isEditing && (
                         <button 
-                            onClick={() => onDelete(insight.id)}
-                            className="ml-2 p-1 text-muted-foreground hover:text-destructive transition-colors"
-                            title="Deletar insight"
+                            onClick={() => setIsEditing(true)}
+                            className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                            title="Editar"
                         >
-                            <Trash2 size={16} />
+                            <Edit2 size={14} />
                         </button>
+                    )}
+                    <button 
+                        onClick={() => onDelete(insight.id)}
+                        className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Deletar"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            </div>
+            
+            {isEditing && (
+                <div className="space-y-2 mb-3">
+                    <textarea
+                        value={editNote}
+                        onChange={(e) => setEditNote(e.target.value)}
+                        placeholder="Adicione um contexto ou uma reflexão pessoal..."
+                        className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+                        rows={3}
+                        maxLength={500}
+                    />
+                    <input
+                        type="url"
+                        value={editSource}
+                        onChange={(e) => setEditSource(e.target.value)}
+                        placeholder="https://exemplo.com/artigo"
+                        className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+                    />
+                    <div className="flex gap-2">
+                        <Button onClick={handleSave} className="flex-1">
+                            <Check size={14} /> Salvar
+                        </Button>
+                        <Button onClick={handleCancel} variant="secondary" className="flex-1">
+                            <X size={14} /> Cancelar
+                        </Button>
                     </div>
                 </div>
-                {insight.note && <p className="text-sm text-muted-foreground mt-2 italic">"{insight.note}"</p>}
-                <div className="flex flex-wrap gap-2 mt-3">
-                    {insight.tags?.map((tag) => (
+            )}
+            
+            {!isEditing && insight.note && (
+                <p className="text-xs text-muted-foreground mb-2 italic">"{insight.note}"</p>
+            )}
+            
+            {!isEditing && insight.tags && insight.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                    {insight.tags.map((tag) => (
                         <span key={tag} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">{tag}</span>
                     ))}
                 </div>
-            </div>
-            <div className="mt-4 flex justify-between items-end">
-                <div className="text-xs text-muted-foreground">
-                    <p>Próxima revisão:</p>
-                    <p className={`font-semibold ${insight.isMastered ? 'text-success' : isOverdue ? 'text-destructive' : 'text-foreground'}`}>
-                        {insight.isMastered ? 'Dominado' : formatDate(insight.nextReview)}
-                    </p>
+            )}
+            
+            {!isEditing && (
+                <div className="flex justify-between items-center">
+                    <div className="text-xs text-muted-foreground">
+                        <span className={`font-medium ${insight.isMastered ? 'text-success' : isOverdue ? 'text-destructive' : 'text-foreground'}`}>
+                            {insight.isMastered ? '✓ Dominado' : isOverdue ? '⚠ Atrasado' : '📅 ' + formatDate(insight.nextReview)}
+                        </span>
+                    </div>
+                    <Button onClick={() => onReview(insight)} variant="secondary">
+                        <BookOpen size={14} /> Revisar
+                    </Button>
                 </div>
-                <Button onClick={() => onReview(insight)} variant="secondary" className="px-3 py-1 text-sm">
-                    <BookOpen size={16} />
-                    Revisar
-                </Button>
-            </div>
+            )}
         </div>
     );
 };
@@ -540,7 +620,12 @@ interface AddInsightFormProps {
     onBack: () => void;
 }
 
-const AddInsightForm: React.FC<AddInsightFormProps> = ({ onAddInsight, onBack }) => {
+interface AddInsightViewProps {
+  onAddInsight: (insight: { content: string; note: string; source: string; tags: string[]; audioEnabled: boolean }) => void;
+  onBack: () => void;
+}
+
+const AddInsightView: React.FC<AddInsightViewProps> = ({ onAddInsight, onBack }) => {
   const [content, setContent] = useState('');
   const [note, setNote] = useState('');
   const [source, setSource] = useState('');
@@ -548,6 +633,82 @@ const AddInsightForm: React.FC<AddInsightFormProps> = ({ onAddInsight, onBack })
   const [audioEnabled, setAudioEnabled] = useState(false);
   
   useKeyPress('Escape', onBack);
+
+  // Função para sugerir tags baseadas no conteúdo
+  const suggestTags = (text: string): string[] => {
+    const tagMap: { [key: string]: string[] } = {
+      'produtividade': ['produtivo', 'eficiência', 'tempo', 'foco', 'organização', 'gestão', 'planejamento'],
+      'tecnologia': ['tech', 'software', 'código', 'programação', 'desenvolvimento', 'app', 'digital', 'ia', 'ai'],
+      'negócios': ['business', 'empresa', 'vendas', 'marketing', 'estratégia', 'lucro', 'cliente'],
+      'aprendizado': ['estudo', 'conhecimento', 'skill', 'habilidade', 'curso', 'educação', 'treino'],
+      'saúde': ['exercício', 'dieta', 'bem-estar', 'mental', 'físico', 'sono', 'stress'],
+      'finanças': ['dinheiro', 'investimento', 'economia', 'poupança', 'renda', 'orçamento'],
+      'relacionamentos': ['pessoas', 'comunicação', 'networking', 'equipe', 'liderança', 'social'],
+      'criatividade': ['ideia', 'inovação', 'design', 'arte', 'criativo', 'inspiração']
+    };
+    
+    const lowerText = text.toLowerCase();
+    const suggestedTags: string[] = [];
+    
+    Object.entries(tagMap).forEach(([tag, keywords]) => {
+      if (keywords.some(keyword => lowerText.includes(keyword))) {
+        suggestedTags.push(tag);
+      }
+    });
+    
+    return suggestedTags.slice(0, 3); // Máximo 3 tags
+  };
+
+  // Função para sugerir nota pessoal baseada no conteúdo
+  const suggestNote = (text: string): string => {
+    const noteTemplates = [
+      'Como posso aplicar isso no meu dia a dia?',
+      'Que experiência pessoal se relaciona com isso?',
+      'Como isso pode melhorar minha produtividade?',
+      'Qual o impacto disso na minha carreira?',
+      'Como posso ensinar isso para outros?',
+      'Que ação concreta posso tomar baseado nisso?'
+    ];
+    
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes('produtiv') || lowerText.includes('eficiên')) {
+      return 'Como posso aplicar isso no meu dia a dia?';
+    }
+    if (lowerText.includes('aprend') || lowerText.includes('estud')) {
+      return 'Como posso ensinar isso para outros?';
+    }
+    if (lowerText.includes('negóci') || lowerText.includes('carreira')) {
+      return 'Qual o impacto disso na minha carreira?';
+    }
+    if (lowerText.includes('ação') || lowerText.includes('fazer')) {
+      return 'Que ação concreta posso tomar baseado nisso?';
+    }
+    
+    return noteTemplates[Math.floor(Math.random() * noteTemplates.length)];
+  };
+
+  // Atualizar sugestões quando o conteúdo mudar
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newContent = e.target.value;
+    setContent(newContent);
+    
+    if (newContent.length > 20) {
+      // Sugerir tags apenas se não houver tags já definidas
+      if (!tags) {
+        const suggestedTags = suggestTags(newContent);
+        if (suggestedTags.length > 0) {
+          setTags(suggestedTags.join(', '));
+        }
+      }
+      
+      // Sugerir nota apenas se não houver nota já definida
+      if (!note) {
+        const suggestedNote = suggestNote(newContent);
+        setNote(suggestedNote);
+      }
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -567,14 +728,20 @@ const AddInsightForm: React.FC<AddInsightFormProps> = ({ onAddInsight, onBack })
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="content" className="block text-sm font-medium text-foreground mb-1">Insight *</label>
-          <textarea id="content" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Capture aqui uma ideia, um fato ou um conceito importante..." className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150" rows={5} required />
+          <textarea id="content" value={content} onChange={handleContentChange} placeholder="Capture aqui uma ideia, um fato ou um conceito importante..." className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150" rows={5} required />
         </div>
         <div>
-          <label htmlFor="tags" className="block text-sm font-medium text-foreground mb-1">Tags (separadas por vírgula)</label>
+          <label htmlFor="tags" className="block text-sm font-medium text-foreground mb-1">
+            Tags (separadas por vírgula)
+            {tags && content.length > 20 && <span className="text-xs text-primary ml-2">✨ Sugerido automaticamente</span>}
+          </label>
           <input id="tags" type="text" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="ex: produtividade, vieses, webdev" className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150" />
         </div>
         <div>
-          <label htmlFor="note" className="block text-sm font-medium text-foreground mb-1">Nota Pessoal</label>
+          <label htmlFor="note" className="block text-sm font-medium text-foreground mb-1">
+            Nota Pessoal
+            {note && content.length > 20 && <span className="text-xs text-primary ml-2">✨ Sugerido automaticamente</span>}
+          </label>
           <textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Adicione um contexto ou uma reflexão pessoal..." className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150" rows={3} maxLength={500} />
         </div>
         <div>
@@ -602,9 +769,10 @@ interface DashboardProps {
     onReview: (insight: Insight) => void;
     onNavigate: (page: string) => void;
     onDelete: (id: string) => void;
+    onUpdate: (id: string, updates: Partial<Insight>) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, onDelete }) => {
+const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, onDelete, onUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('today');
 
@@ -663,7 +831,7 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, o
 
       {filteredInsights.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInsights.map((insight) => <InsightCard key={insight.id} insight={insight} onReview={onReview} onDelete={onDelete} />)}
+          {filteredInsights.map((insight) => <InsightCard key={insight.id} insight={insight} onReview={onReview} onDelete={onDelete} onUpdate={onUpdate} />)}
         </div>
       ) : (
         <div className="text-center py-16 px-6 bg-muted/50 rounded-lg">
@@ -716,25 +884,56 @@ const ReviewView: React.FC<ReviewViewProps> = ({ insight, onUpdateInsight, onBac
   };
 
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto">
-      <div className="flex items-center mb-6"><button onClick={onBack} className="p-2 rounded-full hover:bg-muted mr-4"><ArrowLeft /></button><h2 className="text-2xl font-bold text-foreground">Modo de Revisão</h2></div>
-      <div className="bg-card p-6 sm:p-8 rounded-lg shadow-lg border border-border">
-        <div className="flex justify-between items-start mb-4">
-          <p className="text-lg md:text-xl text-card-foreground leading-relaxed flex-1">{insight.content}</p>
-          {insight.audioEnabled && <AudioPlayer text={insight.content} />}
-        </div>
-        {insight.note && <div className="mt-6 p-4 bg-warning/10 border-l-4 border-warning rounded"><p className="text-sm font-semibold text-warning mb-1">Sua nota:</p><p className="text-foreground italic">"{insight.note}"</p></div>}
-        <div className="text-xs text-muted-foreground border-t border-border pt-4 mt-6">
-          <p>Adicionado em: {formatDate(insight.timestamp)}</p>
-          {insight.source && <p>Fonte: <a href={insight.source} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{insight.source}</a></p>}
-          <p>Estágio de revisão: {insight.reviewStage + 1} / {REVIEW_INTERVALS.length}</p>
+    <div className="animate-fade-in max-w-3xl mx-auto">
+      <button onClick={onBack} className="mb-6 p-2 rounded-full hover:bg-muted transition-colors">
+        <ArrowLeft size={20} />
+      </button>
+      
+      <div className="text-center mb-12">
+        <div className="bg-card p-8 rounded-2xl shadow-sm border border-border">
+          <div className="flex justify-between items-start mb-6">
+            <p className="text-xl md:text-2xl text-card-foreground leading-relaxed flex-1 font-medium">{insight.content}</p>
+            {insight.audioEnabled && <AudioPlayer text={insight.content} />}
+          </div>
+          
+          {insight.note && (
+            <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground italic">"{insight.note}"</p>
+            </div>
+          )}
+          
+          {insight.source && (
+            <div className="mt-4">
+              <a href={insight.source} target="_blank" rel="noopener noreferrer" 
+                 className="text-xs text-primary hover:underline">
+                📎 Ver fonte
+              </a>
+            </div>
+          )}
         </div>
       </div>
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Button onClick={() => handleReview(false)} variant="warning" className="w-full h-16 text-lg"><XCircle />Revisar Mais</Button>
-        <Button onClick={() => handleReview(true)} variant="success" className="w-full h-16 text-lg"><CheckCircle />Lembrei Bem</Button>
+      
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Button onClick={() => handleReview(false)} variant="warning" className="h-14 text-base">
+             <XCircle className="mr-2" size={20} />
+             Preciso revisar mais
+           </Button>
+           <Button onClick={() => handleReview(true)} variant="success" className="h-14 text-base">
+             <CheckCircle className="mr-2" size={20} />
+             Lembrei bem
+           </Button>
+        </div>
+        
+        <Button onClick={handleMastered} variant="secondary" className="w-full h-12">
+          <Zap className="mr-2" size={16} />
+          Marcar como dominado
+        </Button>
       </div>
-      <div className="mt-4"><Button onClick={handleMastered} variant="secondary" className="w-full"><Zap size={16}/>Marcar como Dominado</Button></div>
+      
+      <div className="mt-8 text-center text-xs text-muted-foreground">
+        Estágio {insight.reviewStage + 1} de {REVIEW_INTERVALS.length} • Adicionado em {formatDate(insight.timestamp)}
+      </div>
     </div>
   );
 };
@@ -1519,7 +1718,7 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'add':
-        return <AddInsightForm onAddInsight={handleAddInsight} onBack={() => setPage('dashboard')} />;
+        return <div>Add Insight Form placeholder</div>; // TODO: Implement AddInsightForm component
       case 'review':
         return <ReviewView insight={reviewingInsight} onUpdateInsight={handleUpdateInsight} onBack={() => setPage('dashboard')} />;
       case 'practice':
@@ -1527,7 +1726,7 @@ export default function App() {
       case 'settings':
         return <SettingsView insights={insights} onImport={setInsights} onClearData={() => setInsights([])} onBack={() => setPage('dashboard')} theme={theme} toggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} />;
       default:
-        return <Dashboard insights={insights} onReview={handleStartReview} onNavigate={handleNavigate} onDelete={handleDeleteInsight} />;
+        return <Dashboard insights={insights} onReview={handleStartReview} onNavigate={handleNavigate} onDelete={handleDeleteInsight} onUpdate={handleUpdateInsight} />;
     }
   };
 
