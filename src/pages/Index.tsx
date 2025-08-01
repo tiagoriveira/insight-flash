@@ -500,6 +500,14 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
     const [editSource, setEditSource] = useState(insight.source || '');
     const isOverdue = insight.nextReview < Date.now() && !insight.isMastered;
     
+    // Resetar estado de edição quando o insight mudar
+    useEffect(() => {
+        setIsEditing(false);
+        setEditContent(insight.content);
+        setEditNote(insight.note || '');
+        setEditSource(insight.source || '');
+    }, [insight.id, insight.content, insight.note, insight.source]);
+    
     const handleSave = () => {
         onUpdate(insight.id, {
             content: editContent.trim(),
@@ -531,7 +539,7 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
                             required
                         />
                     ) : (
-                        <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors" 
+                        <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors whitespace-pre-wrap" 
                            onClick={() => setIsEditing(true)}>
                             {insight.content}
                         </p>
@@ -717,6 +725,7 @@ const AddInsightView: React.FC<AddInsightViewProps> = ({ onAddInsight, onBack })
     const tagsArray = tags.split(',').map(t => t.trim()).filter(Boolean);
     onAddInsight({ content, note, source, tags: tagsArray, audioEnabled });
     setContent(''); setNote(''); setSource(''); setTags(''); setAudioEnabled(false);
+    onBack(); // Fechar o formulário após adicionar
   };
 
   return (
@@ -892,7 +901,7 @@ const ReviewView: React.FC<ReviewViewProps> = ({ insight, onUpdateInsight, onBac
       <div className="text-center mb-12">
         <div className="bg-card p-8 rounded-2xl shadow-sm border border-border">
           <div className="flex justify-between items-start mb-6">
-            <p className="text-xl md:text-2xl text-card-foreground leading-relaxed flex-1 font-medium">{insight.content}</p>
+            <p className="text-xl md:text-2xl text-card-foreground leading-relaxed flex-1 font-medium whitespace-pre-wrap">{insight.content}</p>
             {insight.audioEnabled && <AudioPlayer text={insight.content} />}
           </div>
           
@@ -1311,7 +1320,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
                 {/* Insight de referência */}
                 <div className="mb-6 p-4 bg-muted/50 rounded-lg border-l-4 border-primary">
                     <p className="text-sm text-muted-foreground mb-1">Baseado no insight:</p>
-                    <p className="text-sm font-medium text-foreground">{currentExercise.insight.content}</p>
+                    <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{currentExercise.insight.content}</p>
                 </div>
 
                 {/* Pergunta */}
