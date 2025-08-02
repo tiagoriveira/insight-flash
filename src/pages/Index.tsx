@@ -525,8 +525,8 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
     };
     
     return (
-        <div className="bg-card p-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-border">
-            <div className="flex justify-between items-start mb-3">
+        <div className="bg-card p-5 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-border mb-4 max-w-2xl">
+            <div className="flex justify-between items-start mb-4">
                 <div className="flex-1 mr-3">
                     {isEditing ? (
                         <textarea
@@ -537,10 +537,12 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
                             rows={5}
                             autoFocus
                             required
+                            style={{ lineHeight: '1.5' }}
                         />
                     ) : (
-                        <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors whitespace-pre-wrap" 
-                           onClick={() => setIsEditing(true)}>
+                        <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors" 
+                           onClick={() => setIsEditing(true)}
+                           style={{ whiteSpace: 'pre-line', lineHeight: '1.6' }}>
                             {insight.content}
                         </p>
                     )}
@@ -567,22 +569,29 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
             </div>
             
             {isEditing && (
-                <div className="space-y-2 mb-3">
-                    <textarea
-                        value={editNote}
-                        onChange={(e) => setEditNote(e.target.value)}
-                        placeholder="Adicione um contexto ou uma reflexão pessoal..."
-                        className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
-                        rows={3}
-                        maxLength={500}
-                    />
-                    <input
-                        type="url"
-                        value={editSource}
-                        onChange={(e) => setEditSource(e.target.value)}
-                        placeholder="https://exemplo.com/artigo"
-                        className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
-                    />
+                <div className="space-y-3 mb-4">
+                    <div>
+                        <label className="text-sm font-bold text-card-foreground mb-2 block">Nota pessoal:</label>
+                        <textarea
+                            value={editNote}
+                            onChange={(e) => setEditNote(e.target.value)}
+                            placeholder="Adicione um contexto ou uma reflexão pessoal..."
+                            className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+                            rows={3}
+                            maxLength={500}
+                            style={{ lineHeight: '1.5' }}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-bold text-card-foreground mb-2 block">Fonte:</label>
+                        <input
+                            type="url"
+                            value={editSource}
+                            onChange={(e) => setEditSource(e.target.value)}
+                            placeholder="https://exemplo.com/artigo"
+                            className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition duration-150"
+                        />
+                    </div>
                     <div className="flex gap-2">
                         <Button onClick={handleSave} className="flex-1">
                             <Check size={14} /> Salvar
@@ -595,11 +604,14 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
             )}
             
             {!isEditing && insight.note && (
-                <p className="text-xs text-muted-foreground mb-2 italic">"{insight.note}"</p>
+                <div className="mt-3 mb-3">
+                    <h4 className="text-sm font-bold text-card-foreground mb-2">Nota:</h4>
+                    <p className="text-sm text-muted-foreground italic" style={{ whiteSpace: 'pre-line', lineHeight: '1.5' }}>"{insight.note}"</p>
+                </div>
             )}
             
             {!isEditing && insight.tags && insight.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
+                <div className="flex flex-wrap gap-1 mb-4">
                     {insight.tags.map((tag) => (
                         <span key={tag} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">{tag}</span>
                     ))}
@@ -839,7 +851,7 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, o
       </div>
 
       {filteredInsights.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-4 max-w-4xl mx-auto">
           {filteredInsights.map((insight) => <InsightCard key={insight.id} insight={insight} onReview={onReview} onDelete={onDelete} onUpdate={onUpdate} />)}
         </div>
       ) : (
@@ -899,15 +911,18 @@ const ReviewView: React.FC<ReviewViewProps> = ({ insight, onUpdateInsight, onBac
       </button>
       
       <div className="text-center mb-12">
-        <div className="bg-card p-8 rounded-2xl shadow-sm border border-border">
+        <div className="bg-card p-8 rounded-2xl shadow-sm border border-border max-w-4xl mx-auto">
           <div className="flex justify-between items-start mb-6">
-            <p className="text-xl md:text-2xl text-card-foreground leading-relaxed flex-1 font-medium whitespace-pre-wrap">{insight.content}</p>
+            <p className="text-xl md:text-2xl text-card-foreground flex-1 font-medium text-left" 
+               style={{ whiteSpace: 'pre-line', lineHeight: '1.6' }}>{insight.content}</p>
             {insight.audioEnabled && <AudioPlayer text={insight.content} />}
           </div>
           
           {insight.note && (
             <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground italic">"{insight.note}"</p>
+              <h4 className="text-sm font-bold text-card-foreground mb-2 text-left">Nota:</h4>
+              <p className="text-sm text-muted-foreground italic text-left" 
+                 style={{ whiteSpace: 'pre-line', lineHeight: '1.5' }}>"{insight.note}"</p>
             </div>
           )}
           
