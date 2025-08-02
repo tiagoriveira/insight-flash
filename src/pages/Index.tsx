@@ -495,10 +495,17 @@ interface InsightCardProps {
 
 const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const [editContent, setEditContent] = useState(insight.content);
     const [editNote, setEditNote] = useState(insight.note || '');
     const [editSource, setEditSource] = useState(insight.source || '');
     const isOverdue = insight.nextReview < Date.now() && !insight.isMastered;
+    
+    // Verificar se o conteúdo precisa ser truncado (mais de 3 linhas ~ 200 caracteres)
+    const shouldTruncate = insight.content.length > 150;
+    const displayContent = isExpanded || !shouldTruncate 
+        ? insight.content 
+        : insight.content.substring(0, 150) + '...';
     
     // Resetar estado de edição quando o insight mudar
     useEffect(() => {
@@ -525,8 +532,11 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
     };
     
     return (
-        <div className="bg-card p-5 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-border mb-4 max-w-2xl">
-            <div className="flex justify-between items-start mb-4">
+        <div className="bg-card p-5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 border-2 border-border/50 mb-6 max-w-2xl mx-auto relative">
+            {/* Header visual para identificar o card */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/60 to-primary/30 rounded-t-lg"></div>
+            
+            <div className="flex justify-between items-start mb-4 pt-2">
                 <div className="flex-1 mr-3">
                     {isEditing ? (
                         <textarea
@@ -540,11 +550,24 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight, onReview, onDelete, 
                             style={{ lineHeight: '1.5' }}
                         />
                     ) : (
-                        <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors" 
-                           onClick={() => setIsEditing(true)}
-                           style={{ whiteSpace: 'pre-line', lineHeight: '1.6' }}>
-                            {insight.content}
-                        </p>
+                        <div>
+                            <p className="text-card-foreground font-medium cursor-pointer hover:text-primary transition-colors" 
+                               onClick={() => setIsEditing(true)}
+                               style={{ whiteSpace: 'pre-line', lineHeight: '1.6' }}>
+                                {displayContent}
+                            </p>
+                            {shouldTruncate && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsExpanded(!isExpanded);
+                                    }}
+                                    className="mt-2 text-sm text-primary hover:text-primary/80 transition-colors font-medium"
+                                >
+                                    {isExpanded ? 'Ver menos' : 'Ver mais'}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -851,7 +874,7 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, o
       </div>
 
       {filteredInsights.length > 0 ? (
-        <div className="space-y-4 max-w-4xl mx-auto">
+        <div className="space-y-6 max-w-4xl mx-auto px-4">
           {filteredInsights.map((insight) => <InsightCard key={insight.id} insight={insight} onReview={onReview} onDelete={onDelete} onUpdate={onUpdate} />)}
         </div>
       ) : (
