@@ -8,6 +8,7 @@ import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 import { useFirestore } from '../hooks/useFirestore';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User, setPersistence, browserSessionPersistence, browserLocalPersistence } from 'firebase/auth';
 import app from '../lib/firebase';
+import { useIsMobile } from '../hooks/use-mobile';
 
 // --- TIPOS E CONSTANTES ---
 interface Insight {
@@ -1221,10 +1222,15 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
     const [showAnswer, setShowAnswer] = useState(false);
     const [sessionResults, setSessionResults] = useState<Array<{ correct: boolean; exercise: Exercise }>>([]);
     const [sessionComplete, setSessionComplete] = useState(false);
-
+    const [viewPhase, setViewPhase] = useState<'question' | 'answer' | 'reference'>('question');
+    const [showInsightReference, setShowInsightReference] = useState(false);
+    
+    // Novo: animações para progressive disclosure
+    const fadeInTimer = useRef<NodeJS.Timeout | null>(null);
+    
     useKeyPress('Escape', onBack);
 
-    // Filtrar insights elegíveis para exercícios usando a função isEligibleForExercise (Sprint 1)
+    // Filtrar insights elegíveis para exercícios usando a função isEligibleForExercise
     const eligibleInsights = useMemo(() => {
         return insights
             .filter(insight => isEligibleForExercise(insight))
@@ -1244,10 +1250,22 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
     }, [eligibleInsights]);
 
     const currentExercise = exercises[currentExerciseIndex];
+    
+    // Novo: Reset do estado visual ao mudar de exercício
+    useEffect(() => {
+        if (currentExercise) {
+            setViewPhase('question');
+            setShowInsightReference(false);
+            
+            // Programar a transição para a próxima fase após um delay
+            if (fadeInTimer.current) clearTimeout(fadeInTimer.current);
+        }
+    }, [currentExerciseIndex, currentExercise]);
 
     const handleAnswer = (answer: string) => {
         setUserAnswer(answer);
         setShowAnswer(true);
+        setViewPhase('answer');
     };
 
     const handleNext = () => {
@@ -1288,6 +1306,12 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
         setShowAnswer(false);
         setSessionResults([]);
         setSessionComplete(false);
+        setViewPhase('question');
+        setShowInsightReference(false);
+    };
+    
+    const toggleInsightReference = () => {
+        setShowInsightReference(prev => !prev);
     };
 
     if (eligibleInsights.length === 0) {
@@ -1358,117 +1382,156 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
 
     return (
         <div className="animate-fade-in max-w-2xl mx-auto">
-            <div className="flex items-center mb-6">
-                <button onClick={onBack} className="p-2 rounded-full hover:bg-muted mr-4">
-                    <ArrowLeft />
-                </button>
-                <h2 className="text-2xl font-bold text-foreground">Exercícios</h2>
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                    <button onClick={onBack} className="p-2 rounded-full hover:bg-muted mr-4">
+                        <ArrowLeft />
+                    </button>
+                    <h2 className="text-2xl font-bold text-foreground">Exercícios</h2>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                    {currentExerciseIndex + 1} / {exercises.length}
+                </div>
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress Bar - Mantido visível durante todo o fluxo */}
             <div className="mb-6">
-                <div className="flex justify-between text-sm font-medium text-muted-foreground mb-1">
-                    <span>Progresso da Sessão</span>
-                    <span>{currentExerciseIndex + 1} / {exercises.length}</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
+                <div className="w-full bg-muted rounded-full h-1.5">
                     <div 
-                        className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                        className="bg-primary h-1.5 rounded-full transition-all duration-300" 
                         style={{ width: `${((currentExerciseIndex + 1) / exercises.length) * 100}%` }}
                     ></div>
                 </div>
             </div>
 
             <div className="bg-card p-6 rounded-lg shadow-lg border border-border">
-                {/* Insight de referência */}
-                <div className="mb-6 p-4 bg-muted/50 rounded-lg border-l-4 border-primary">
-                    <p className="text-sm text-muted-foreground mb-1">Baseado no insight:</p>
-                    <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{currentExercise.insight.content}</p>
-                </div>
-
-                {/* Pergunta */}
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">{currentExercise.prompt}</h3>
-
-                    {/* Diferentes tipos de exercício */}
-                    {currentExercise.type === 'fill-blank' && (
-                        <input
-                            type="text"
-                            value={userAnswer}
-                            onChange={(e) => setUserAnswer(e.target.value)}
-                            placeholder="Digite sua resposta..."
-                            className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-                            disabled={showAnswer}
-                        />
-                    )}
-
-                    {currentExercise.type === 'multiple-choice' && currentExercise.options && (
-                        <div className="space-y-2">
-                            {currentExercise.options.map((option, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => handleAnswer(option)}
-                                    disabled={showAnswer}
-                                    className={`w-full p-3 text-left border border-border rounded-lg transition-colors ${
-                                        userAnswer === option 
-                                            ? 'bg-primary text-primary-foreground' 
-                                            : 'bg-background hover:bg-muted'
-                                    }`}
-                                >
-                                    {option}
-                                </button>
-                            ))}
+                {/* Seção condicional baseada na fase */}
+                {viewPhase === 'question' && (
+                    <div className="animate-fade-in">
+                        {/* Botão para mostrar referência (toggle) */}
+                        <div className="flex justify-end mb-4">
+                            <button
+                                onClick={toggleInsightReference}
+                                className="text-xs flex items-center text-muted-foreground hover:text-primary transition-colors"
+                            >
+                                {showInsightReference ? 'Ocultar referência' : 'Mostrar referência'} 
+                                <BookOpen size={14} className="ml-1" />
+                            </button>
                         </div>
-                    )}
+                        
+                        {/* Insight de referência (colapsável) */}
+                        {showInsightReference && (
+                            <div className="mb-6 p-4 bg-muted/50 rounded-lg border-l-4 border-primary animate-fade-in">
+                                <p className="text-sm text-muted-foreground mb-1">Baseado no insight:</p>
+                                <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{currentExercise.insight.content}</p>
+                            </div>
+                        )}
 
-                    {currentExercise.type === 'open-answer' && (
-                        <textarea
-                            value={userAnswer}
-                            onChange={(e) => setUserAnswer(e.target.value)}
-                            placeholder="Escreva sua resposta..."
-                            className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-                            rows={4}
-                            disabled={showAnswer}
-                        />
-                    )}
-                </div>
+                        {/* Pergunta */}
+                        <div className="mb-6">
+                            <h3 className="text-lg font-semibold text-foreground mb-4">{currentExercise.prompt}</h3>
 
-                {/* Feedback e ações */}
-                {showAnswer ? (
-                    <div className="space-y-4">
+                            {/* Diferentes tipos de exercício */}
+                            {currentExercise.type === 'fill-blank' && (
+                                <input
+                                    type="text"
+                                    value={userAnswer}
+                                    onChange={(e) => setUserAnswer(e.target.value)}
+                                    placeholder="Digite sua resposta..."
+                                    className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                                    disabled={showAnswer}
+                                    autoFocus
+                                />
+                            )}
+
+                            {currentExercise.type === 'multiple-choice' && currentExercise.options && (
+                                <div className="space-y-2">
+                                    {currentExercise.options.map((option, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => handleAnswer(option)}
+                                            disabled={showAnswer}
+                                            className={`w-full p-3 text-left border border-border rounded-lg transition-colors ${
+                                                userAnswer === option 
+                                                    ? 'bg-primary text-primary-foreground' 
+                                                    : 'bg-background hover:bg-muted'
+                                            }`}
+                                        >
+                                            {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {currentExercise.type === 'open-answer' && (
+                                <textarea
+                                    value={userAnswer}
+                                    onChange={(e) => setUserAnswer(e.target.value)}
+                                    placeholder="Escreva sua resposta..."
+                                    className="w-full p-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                                    rows={4}
+                                    disabled={showAnswer}
+                                    autoFocus
+                                />
+                            )}
+                        </div>
+
+                        {/* Botão para responder */}
+                        <div className="flex gap-4">
+                            <Button 
+                                onClick={() => handleAnswer(userAnswer)} 
+                                variant="default" 
+                                className="flex-1"
+                                disabled={!userAnswer.trim()}
+                            >
+                                Responder
+                            </Button>
+                            {currentExercise.type === 'open-answer' && (
+                                <Button 
+                                    onClick={() => setShowAnswer(true)} 
+                                    variant="secondary"
+                                    className="flex-1"
+                                >
+                                    Ver Resposta
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Fase de resposta/feedback */}
+                {viewPhase === 'answer' && showAnswer && (
+                    <div className="animate-fade-in space-y-4">
+                        {/* Resposta do usuário */}
+                        <div className="p-4 bg-muted/30 rounded-lg">
+                            <p className="text-sm text-muted-foreground mb-1">Sua resposta:</p>
+                            <p className="font-medium">{userAnswer}</p>
+                        </div>
+                        
+                        {/* Feedback */}
                         <div className={`p-4 rounded-lg border-l-4 ${
                             userAnswer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim()
                                 ? 'bg-success/10 border-success text-success'
                                 : 'bg-destructive/10 border-destructive text-destructive'
                         }`}>
                             <p className="font-semibold mb-1">
-                                {userAnswer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim() ? '✅ Correto!' : '❌ Não foi dessa vez'}
+                                {userAnswer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim() 
+                                    ? '✅ Correto!' 
+                                    : '❌ Não foi dessa vez'}
                             </p>
-                            <p>Resposta: {currentExercise.correctAnswer}</p>
+                            <p>Resposta correta: {currentExercise.correctAnswer}</p>
                         </div>
+                        
+                        {/* Insight completo (exibido apenas após resposta) */}
+                        <div className="p-4 bg-muted/50 rounded-lg border-l-4 border-primary">
+                            <p className="text-sm text-muted-foreground mb-1">Insight completo:</p>
+                            <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{currentExercise.insight.content}</p>
+                        </div>
+                        
+                        {/* Botão próximo */}
                         <Button onClick={handleNext} variant="default" className="w-full">
                             {currentExerciseIndex < exercises.length - 1 ? 'Próximo Exercício' : 'Finalizar Sessão'}
                         </Button>
-                    </div>
-                ) : (
-                    <div className="flex gap-4">
-                        <Button 
-                            onClick={() => handleAnswer(userAnswer)} 
-                            variant="default" 
-                            className="flex-1"
-                            disabled={!userAnswer.trim()}
-                        >
-                            Responder
-                        </Button>
-                        {currentExercise.type === 'open-answer' && (
-                            <Button 
-                                onClick={() => setShowAnswer(true)} 
-                                variant="secondary"
-                                className="flex-1"
-                            >
-                                Ver Resposta
-                            </Button>
-                        )}
                     </div>
                 )}
             </div>
@@ -1499,6 +1562,18 @@ export default function App() {
     insightId: null,
     insightContent: ''
   });
+
+  // Hook para identificar mobile/desktop
+  const isMobile = useIsMobile();
+
+  // Menu de navegação unificado
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: <Search size={isMobile ? 24 : 18} /> },
+    { id: 'add', label: 'Adicionar', icon: <Plus size={isMobile ? 24 : 18} /> },
+    { id: 'practice', label: 'Exercícios', icon: <Target size={isMobile ? 24 : 18} /> },
+    { id: 'review', label: 'Revisar', icon: <BookOpen size={isMobile ? 24 : 18} /> },
+    { id: 'settings', label: 'Configurações', icon: <Settings size={isMobile ? 24 : 18} /> }
+  ];
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -1863,6 +1938,77 @@ export default function App() {
     }
   };
 
+  // Renderização dos itens do menu
+  const renderNavItems = () => {
+    return navItems.map(item => {
+      const isActive = page === item.id;
+      const hasCounter = item.id === 'practice' || item.id === 'review';
+      const counter = item.id === 'practice' ? exerciseAvailableCount : item.id === 'review' ? insightsToReviewCount : 0;
+      const disabled = (item.id === 'practice' && exerciseAvailableCount === 0) || 
+                      (item.id === 'review' && insightsToReviewCount === 0);
+      
+      if (isMobile) {
+        if (item.id === 'practice') {
+          return (
+            <div key={item.id} className="relative">
+              <Button 
+                onClick={() => !disabled && handleNavigate(item.id)} 
+                disabled={disabled}
+                className="w-16 h-16 rounded-full shadow-lg -mt-8"
+              >
+                {item.icon}
+              </Button>
+              {counter > 0 && (
+                <span className="absolute -top-6 right-0 block h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
+                  {counter}
+                </span>
+              )}
+            </div>
+          );
+        }
+        
+        return (
+          <NavButtonMobile
+            key={item.id}
+            label={item.label}
+            icon={item.icon}
+            active={isActive}
+            onClick={() => !disabled && handleNavigate(item.id)}
+            disabled={disabled}
+          />
+        );
+      }
+      
+      // Desktop version
+      if (hasCounter) {
+        return (
+          <Button 
+            key={item.id}
+            onClick={() => !disabled && handleNavigate(item.id)} 
+            disabled={disabled}
+            variant={isActive ? "default" : "secondary"}
+            className="flex items-center gap-2"
+          >
+            {item.icon}
+            {item.label} ({counter})
+          </Button>
+        );
+      }
+      
+      return (
+        <button 
+          key={item.id}
+          onClick={() => handleNavigate(item.id)} 
+          className={`font-medium transition-colors ${
+            isActive ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+          }`}
+        >
+          {item.label}
+        </button>
+      );
+    });
+  };
+
   return (
     <div className="bg-background min-h-screen font-sans text-foreground">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap'); body { font-family: 'Inter', sans-serif; } .animate-fade-in { animation: fadeIn 0.3s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
@@ -1889,66 +2035,132 @@ export default function App() {
         </div>
       </Modal>
       
-      <header className="hidden md:flex bg-card/80 backdrop-blur-lg border-b border-border sticky top-0 z-10">
-        <nav className="container mx-auto px-6 py-3 flex justify-between items-center max-w-6xl">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setPage('dashboard')}><BrainCircuit className="text-primary" /><h1 className="text-xl font-bold text-foreground">Clip & Review</h1></div>
-          <div className="flex items-center gap-6">
-            <button onClick={() => handleNavigate('dashboard')} className={`font-medium ${page === 'dashboard' ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}>Dashboard</button>
-            <button onClick={() => handleNavigate('add')} className={`font-medium ${page === 'add' ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}>Adicionar</button>
-            <button onClick={() => handleNavigate('practice')} className={`font-medium ${page === 'practice' ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}>Exercícios</button>
-            <button onClick={() => handleNavigate('settings')} className={`font-medium ${page === 'settings' ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}>Configurações</button>
+      {/* Header unificado com design responsivo */}
+      <header className={`bg-card/80 backdrop-blur-lg border-b border-border sticky top-0 z-10 ${isMobile ? 'p-4' : ''}`}>
+        <nav className={`container mx-auto ${isMobile ? 'px-4' : 'px-6 py-3'} flex justify-between items-center max-w-6xl`}>
+          <div 
+            className="flex items-center gap-2 cursor-pointer" 
+            onClick={() => setPage('dashboard')}
+          >
+            <BrainCircuit className="text-primary" />
+            <h1 className={`${isMobile ? 'text-lg' : 'text-xl'} font-bold text-foreground`}>
+              Clip & Review
+            </h1>
           </div>
-          <div className="flex items-center gap-4">
-            <Button onClick={() => handleNavigate('practice')} disabled={exerciseAvailableCount === 0} variant="secondary">
-              <Target size={18} />Praticar ({exerciseAvailableCount})
-            </Button>
-            <Button onClick={() => handleNavigate('review')} disabled={insightsToReviewCount === 0}>
-              <BookOpen size={18} />Revisar ({insightsToReviewCount})
-            </Button>
-            <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full hover:bg-muted">
-              <span className="sr-only">Toggle theme</span>
-              {theme === 'dark' ? <Sun /> : <Moon />}
-            </button>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-muted-foreground">{user?.email}</span>
-              <button onClick={handleLogout} className="text-xs bg-destructive text-white px-2 py-1 rounded">Sair</button>
+          
+          {!isMobile && (
+            <>
+              <div className="flex items-center gap-6">
+                {navItems.slice(0, 4).map(item => (
+                  <button 
+                    key={item.id}
+                    onClick={() => handleNavigate(item.id)} 
+                    className={`font-medium ${
+                      page === item.id ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <Button 
+                  onClick={() => handleNavigate('practice')} 
+                  disabled={exerciseAvailableCount === 0} 
+                  variant="secondary"
+                >
+                  <Target size={18} />Praticar ({exerciseAvailableCount})
+                </Button>
+                <Button 
+                  onClick={() => handleNavigate('review')} 
+                  disabled={insightsToReviewCount === 0}
+                >
+                  <BookOpen size={18} />Revisar ({insightsToReviewCount})
+                </Button>
+                <button 
+                  onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
+                  className="p-2 rounded-full hover:bg-muted"
+                >
+                  <span className="sr-only">Alternar tema</span>
+                  {theme === 'dark' ? <Sun /> : <Moon />}
+                </button>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-muted-foreground">{user?.email}</span>
+                  <button 
+                    onClick={handleLogout} 
+                    className="text-xs bg-destructive text-white px-2 py-1 rounded"
+                  >
+                    Sair
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+          
+          {isMobile && (
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
+                className="p-2 rounded-full hover:bg-muted"
+              >
+                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+              {user && (
+                <div className="text-xs flex gap-1 items-center">
+                  <span className="text-muted-foreground max-w-[80px] truncate">
+                    {user.email}
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </nav>
       </header>
 
-      <main className="container mx-auto px-4 sm:px-6 py-8 max-w-6xl md:pb-16">{renderPage()}</main>
+      <main className="container mx-auto px-4 sm:px-6 py-8 max-w-6xl md:pb-16">
+        {renderPage()}
+      </main>
 
-      <footer className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border p-2 flex justify-around items-center z-10">
-        <NavButtonMobile label="Dashboard" icon={<Search />} active={page === 'dashboard'} onClick={() => handleNavigate('dashboard')} />
-        <NavButtonMobile label="Adicionar" icon={<Plus />} active={page === 'add'} onClick={() => handleNavigate('add')} />
-        <div className="relative">
-            <Button onClick={() => handleNavigate('practice')} disabled={exerciseAvailableCount === 0} className="w-16 h-16 rounded-full shadow-lg -mt-8"><Target /></Button>
-            {exerciseAvailableCount > 0 && <span className="absolute -top-6 right-0 block h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">{exerciseAvailableCount}</span>}
-        </div>
-        <NavButtonMobile label="Revisar" icon={<BookOpen />} active={page === 'review'} onClick={() => handleNavigate('review')} />
-        <NavButtonMobile label="Ajustes" icon={<Settings />} active={page === 'settings'} onClick={() => handleNavigate('settings')} />
-        <button onClick={handleLogout} className="flex flex-col items-center justify-center text-xs w-20 h-14 rounded-lg transition-colors text-destructive">
-          <span className="text-lg">👤</span>
-          <span>Sair</span>
-        </button>
-      </footer>
-       <div className="h-24 md:hidden"></div>
+      {isMobile && (
+        <footer className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-2 flex justify-around items-center z-10">
+          {renderNavItems()}
+          <button onClick={handleLogout} className="flex flex-col items-center justify-center text-xs w-20 h-14 rounded-lg transition-colors text-destructive">
+            <span className="text-lg">👤</span>
+            <span>Sair</span>
+          </button>
+        </footer>
+      )}
+      {isMobile && <div className="h-24"></div>}
     </div>
   );
 }
 
+// Componente NavButtonMobile aprimorado com status de "disabled"
 interface NavButtonMobileProps {
-    label: string;
-    icon: React.ReactElement;
-    active: boolean;
-    onClick: () => void;
-    className?: string;
+  label: string;
+  icon: React.ReactElement;
+  active: boolean;
+  onClick: () => void;
+  className?: string;
+  disabled?: boolean;
 }
 
-const NavButtonMobile: React.FC<NavButtonMobileProps> = ({ label, icon, active, onClick, className = '' }) => (
-    <button onClick={onClick} className={`flex flex-col items-center justify-center text-xs w-20 h-14 rounded-lg transition-colors ${active ? 'text-primary bg-primary/10' : 'text-muted-foreground'} ${className}`}>
-        {React.cloneElement(icon, { size: 24 })}
-        <span className="mt-1">{label}</span>
-    </button>
+const NavButtonMobile: React.FC<NavButtonMobileProps> = ({ 
+  label, icon, active, onClick, className = '', disabled = false 
+}) => (
+  <button 
+    onClick={onClick} 
+    disabled={disabled}
+    className={`flex flex-col items-center justify-center text-xs w-20 h-14 rounded-lg transition-colors ${
+      active 
+        ? 'text-primary bg-primary/10' 
+        : disabled 
+          ? 'text-muted-foreground/50 opacity-60' 
+          : 'text-muted-foreground'
+    } ${className}`}
+  >
+    {React.cloneElement(icon, { size: 24 })}
+    <span className="mt-1">{label}</span>
+  </button>
 );
