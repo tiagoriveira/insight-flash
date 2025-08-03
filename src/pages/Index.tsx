@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Plus, Search, Settings, BookOpen, ArrowLeft, Download, Upload, Trash2, CheckCircle, XCircle, BrainCircuit, Zap, Moon, Sun, Target, Volume2, VolumeX, Edit2, Check, X } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { ExerciseEngine, Exercise } from '../modules/exercises/ExerciseEngine';
 import { AIExerciseGenerator } from '../modules/exercises/AIExerciseGenerator';
 import { useFirestore } from '../hooks/useFirestore';
@@ -33,8 +36,71 @@ interface Insight {
 const REVIEW_INTERVALS = [1, 3, 7, 21];
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+// --- COMPONENTES DE LOADING ---
+
+const DashboardSkeleton: React.FC = () => {
+  return (
+    <div className="animate-fade-in">
+      {/* Header skeleton */}
+      <div className="mb-6">
+        <Skeleton className="h-8 w-48 mb-2" />
+        <div className="mt-2">
+          <div className="flex justify-between text-sm mb-1">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+          <Skeleton className="w-full h-2.5 rounded-full" />
+        </div>
+      </div>
+
+      {/* Search and filters skeleton */}
+      <div className="mb-6 space-y-4 sm:flex sm:items-center sm:justify-between sm:space-y-0">
+        <Skeleton className="h-10 w-full sm:w-80" />
+        <div className="flex space-x-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-8 w-20" />
+        </div>
+      </div>
+
+      {/* Cards skeleton */}
+      <div className="space-y-6 max-w-4xl mx-auto px-4">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="bg-card p-5 rounded-lg shadow-md border-2 border-border/50">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/60 to-primary/30 rounded-t-lg"></div>
+            <div className="pt-2">
+              <Skeleton className="h-4 w-full mb-2" />
+              <Skeleton className="h-4 w-3/4 mb-2" />
+              <Skeleton className="h-4 w-1/2 mb-4" />
+              <div className="flex justify-between items-center">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-20" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // --- HOOKS CUSTOMIZADOS ---
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 function useDarkMode() {
     const [theme, setTheme] = useFirestore<'light' | 'dark'>('theme', 'light');
@@ -234,21 +300,17 @@ const ExerciseSettings: React.FC = () => {
       {/* Configuração de IA */}
       <div className="flex justify-between items-center">
         <div>
-          <span className="text-foreground font-medium">Usar Geração com IA</span>
+          <label htmlFor="use-ai-switch" className="text-foreground font-medium cursor-pointer">
+            Usar Geração com IA
+          </label>
           <p className="text-sm text-muted-foreground">Exercícios mais inteligentes e contextuais</p>
         </div>
-        <button
-          onClick={() => setUseAI(!useAI)}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-            useAI ? 'bg-primary' : 'bg-muted'
-          }`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-              useAI ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+        <Switch
+          id="use-ai-switch"
+          checked={useAI}
+          onCheckedChange={setUseAI}
+          aria-label="Ativar geração de exercícios com inteligência artificial"
+        />
       </div>
 
       {/* Limite de exercícios por sessão */}
@@ -291,52 +353,40 @@ const ExerciseSettings: React.FC = () => {
 
       {/* Tipos de exercícios habilitados */}
       <div>
-        <label className="block text-foreground font-medium mb-3">Tipos de Exercícios</label>
-        <div className="space-y-2">
+        <span className="block text-foreground font-medium mb-3">Tipos de Exercícios</span>
+        <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Preenchimento de Lacunas</span>
-            <button
-              onClick={() => handleExerciseTypeToggle('fill-blank')}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                enabledExerciseTypes['fill-blank'] ? 'bg-primary' : 'bg-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  enabledExerciseTypes['fill-blank'] ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <label htmlFor="fill-blank-switch" className="text-muted-foreground cursor-pointer">
+              Preenchimento de Lacunas
+            </label>
+            <Switch
+              id="fill-blank-switch"
+              checked={enabledExerciseTypes['fill-blank']}
+              onCheckedChange={(checked) => handleExerciseTypeToggle('fill-blank')}
+              aria-label="Ativar exercícios de preenchimento de lacunas"
+            />
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Múltipla Escolha</span>
-            <button
-              onClick={() => handleExerciseTypeToggle('multiple-choice')}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                enabledExerciseTypes['multiple-choice'] ? 'bg-primary' : 'bg-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  enabledExerciseTypes['multiple-choice'] ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <label htmlFor="multiple-choice-switch" className="text-muted-foreground cursor-pointer">
+              Múltipla Escolha
+            </label>
+            <Switch
+              id="multiple-choice-switch"
+              checked={enabledExerciseTypes['multiple-choice']}
+              onCheckedChange={(checked) => handleExerciseTypeToggle('multiple-choice')}
+              aria-label="Ativar exercícios de múltipla escolha"
+            />
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Resposta Aberta</span>
-            <button
-              onClick={() => handleExerciseTypeToggle('open-answer')}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                enabledExerciseTypes['open-answer'] ? 'bg-primary' : 'bg-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  enabledExerciseTypes['open-answer'] ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <label htmlFor="open-answer-switch" className="text-muted-foreground cursor-pointer">
+              Resposta Aberta
+            </label>
+            <Switch
+              id="open-answer-switch"
+              checked={enabledExerciseTypes['open-answer']}
+              onCheckedChange={(checked) => handleExerciseTypeToggle('open-answer')}
+              aria-label="Ativar exercícios de resposta aberta"
+            />
           </div>
         </div>
       </div>
@@ -364,21 +414,17 @@ const ExerciseSettings: React.FC = () => {
       {/* Avanço automático */}
       <div className="flex justify-between items-center">
         <div>
-          <span className="text-foreground font-medium">Avanço Automático</span>
+          <label htmlFor="auto-advance-switch" className="text-foreground font-medium cursor-pointer">
+            Avanço Automático
+          </label>
           <p className="text-sm text-muted-foreground">Avançar automaticamente após resposta correta</p>
         </div>
-        <button
-          onClick={() => setAutoAdvance(!autoAdvance)}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-            autoAdvance ? 'bg-primary' : 'bg-muted'
-          }`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-              autoAdvance ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+        <Switch
+          id="auto-advance-switch"
+          checked={autoAdvance}
+          onCheckedChange={setAutoAdvance}
+          aria-label="Ativar avanço automático após resposta correta"
+        />
       </div>
 
       <div className="pt-4 border-t border-border">
@@ -457,33 +503,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, onConfi
                 <div className="text-muted-foreground">{children}</div>
                 <div className="mt-6 flex justify-end space-x-4">
                     <Button onClick={onClose} variant="secondary">{cancelText}</Button>
-                    {onConfirm && <Button onClick={onConfirm} variant="primary">{confirmText}</Button>}
+                    {onConfirm && <Button onClick={onConfirm} variant="default">{confirmText}</Button>}
                 </div>
             </div>
         </div>
     );
-};
-
-type ButtonVariant = 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    children: React.ReactNode;
-    variant?: ButtonVariant;
-}
-
-const Button: React.FC<ButtonProps> = ({ children, className = '', variant = 'primary', ...props }) => {
-  const baseClasses = 'px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:ring-offset-background';
-  const variants: Record<ButtonVariant, string> = {
-    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary',
-    secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary',
-    success: 'bg-success text-success-foreground hover:bg-success/90 focus:ring-success',
-    warning: 'bg-warning text-warning-foreground hover:bg-warning/90 focus:ring-warning',
-    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive',
-  };
-  return (
-    <button className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
-      {children}
-    </button>
-  );
 };
 
 interface InsightCardProps {
@@ -799,7 +823,7 @@ const AddInsightView: React.FC<AddInsightViewProps> = ({ onAddInsight, onBack })
           </label>
         </div>
         <div className="flex justify-end pt-2">
-          <Button type="submit" variant="primary" disabled={content.length < 10}>
+          <Button type="submit" variant="default" disabled={content.length < 10}>
             <Plus size={20} /> Adicionar Insight
           </Button>
         </div>
@@ -819,6 +843,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, onDelete, onUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('today');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const filteredInsights = useMemo(() => {
     const now = Date.now();
@@ -830,8 +855,8 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, o
       result = insights.filter((i) => i.isMastered);
     }
     
-    if (searchTerm) {
-      const lowerCaseSearch = searchTerm.toLowerCase();
+    if (debouncedSearchTerm) {
+      const lowerCaseSearch = debouncedSearchTerm.toLowerCase();
       result = result.filter((i) => 
         i.content.toLowerCase().includes(lowerCaseSearch) ||
         (i.note && i.note.toLowerCase().includes(lowerCaseSearch)) ||
@@ -840,7 +865,7 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, o
     }
     
     return result.sort((a, b) => calculatePriority(b) - calculatePriority(a));
-  }, [insights, searchTerm, filter]);
+  }, [insights, debouncedSearchTerm, filter]);
 
   const totalInsights = insights.length;
   const completedInsights = insights.filter((i) => i.isMastered).length;
@@ -886,7 +911,7 @@ const Dashboard: React.FC<DashboardProps> = ({ insights, onReview, onNavigate, o
           <p className="mt-2 text-muted-foreground">
             {filter === 'today' ? 'Você está em dia. Que tal adicionar um novo insight?' : 'Adicione um insight ou ajuste seus filtros.'}
           </p>
-          <Button onClick={() => onNavigate('add')} variant="primary" className="mt-6">
+          <Button onClick={() => onNavigate('add')} variant="default" className="mt-6">
             <Plus size={20}/> Adicionar Primeiro Insight
           </Button>
         </div>
@@ -962,11 +987,11 @@ const ReviewView: React.FC<ReviewViewProps> = ({ insight, onUpdateInsight, onBac
       
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Button onClick={() => handleReview(false)} variant="warning" className="h-14 text-base">
+          <Button onClick={() => handleReview(false)} variant="outline" className="h-14 text-base border-warning text-warning hover:bg-warning hover:text-warning-foreground">
              <XCircle className="mr-2" size={20} />
              Preciso revisar mais
            </Button>
-           <Button onClick={() => handleReview(true)} variant="success" className="h-14 text-base">
+           <Button onClick={() => handleReview(true)} variant="outline" className="h-14 text-base border-success text-success hover:bg-success hover:text-success-foreground">
              <CheckCircle className="mr-2" size={20} />
              Lembrei bem
            </Button>
@@ -1174,7 +1199,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ insights, onImport, onClear
                     </div>
                     <div className="bg-card p-6 rounded-lg shadow-sm border border-destructive/20">
                         <h3 className="text-lg font-semibold text-destructive mb-2">Zona de Perigo</h3>
-                        <Button onClick={confirmClearData} variant="danger" className="w-full mt-4"><Trash2 size={16} /> Apagar Todos os Dados</Button>
+                        <Button onClick={confirmClearData} variant="destructive" className="w-full mt-4"><Trash2 size={16} /> Apagar Todos os Dados</Button>
                     </div>
                 </div>
             </div>
@@ -1282,7 +1307,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
                     <p className="mt-2 text-muted-foreground">
                         Revise alguns insights até o estágio 2+ para habilitá-los para exercícios.
                     </p>
-                    <Button onClick={onBack} variant="primary" className="mt-6">
+                    <Button onClick={onBack} variant="default" className="mt-6">
                         Voltar ao Dashboard
                     </Button>
                 </div>
@@ -1314,7 +1339,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
                         </p>
                     </div>
                     <div className="flex gap-4">
-                        <Button onClick={resetSession} variant="primary" className="flex-1">
+                        <Button onClick={resetSession} variant="default" className="flex-1">
                             <Target size={16} />
                             Nova Sessão
                         </Button>
@@ -1421,7 +1446,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
                             </p>
                             <p>Resposta: {currentExercise.correctAnswer}</p>
                         </div>
-                        <Button onClick={handleNext} variant="primary" className="w-full">
+                        <Button onClick={handleNext} variant="default" className="w-full">
                             {currentExerciseIndex < exercises.length - 1 ? 'Próximo Exercício' : 'Finalizar Sessão'}
                         </Button>
                     </div>
@@ -1429,7 +1454,7 @@ const PracticeView: React.FC<PracticeViewProps> = ({ insights, onUpdateInsight, 
                     <div className="flex gap-4">
                         <Button 
                             onClick={() => handleAnswer(userAnswer)} 
-                            variant="primary" 
+                            variant="default" 
                             className="flex-1"
                             disabled={!userAnswer.trim()}
                         >
@@ -1465,6 +1490,15 @@ export default function App() {
   const [page, setPage] = useState('dashboard');
   const [reviewingInsight, setReviewingInsight] = useState<Insight | null>(null);
   const [theme, setTheme] = useDarkMode();
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    insightId: string | null;
+    insightContent: string;
+  }>({
+    isOpen: false,
+    insightId: null,
+    insightContent: ''
+  });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -1621,10 +1655,34 @@ export default function App() {
   }, []);
 
   const handleDeleteInsight = useCallback((id: string) => {
-    if (confirm('Tem certeza que deseja deletar este insight?')) {
-      setInsights(prev => prev.filter(i => i.id !== id));
+    const insight = insights.find(i => i.id === id);
+    if (insight) {
+      setDeleteConfirmation({
+        isOpen: true,
+        insightId: id,
+        insightContent: insight.content.substring(0, 80) + (insight.content.length > 80 ? '...' : '')
+      });
     }
-  }, [setInsights]);
+  }, [insights]);
+
+  const confirmDeleteInsight = useCallback(() => {
+    if (deleteConfirmation.insightId) {
+      setInsights(prev => prev.filter(i => i.id !== deleteConfirmation.insightId));
+      setDeleteConfirmation({
+        isOpen: false,
+        insightId: null,
+        insightContent: ''
+      });
+    }
+  }, [deleteConfirmation.insightId, setInsights]);
+
+  const cancelDeleteInsight = useCallback(() => {
+    setDeleteConfirmation({
+      isOpen: false,
+      insightId: null,
+      insightContent: ''
+    });
+  }, []);
 
   const handleNavigate = (targetPage: string) => {
     if (targetPage === 'review') {
@@ -1753,11 +1811,39 @@ export default function App() {
   // Mostrar loading enquanto carrega dados do Firestore
   if (insightsLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Carregando seus dados...</p>
-        </div>
+      <div className="bg-background min-h-screen font-sans text-foreground">
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap'); body { font-family: 'Inter', sans-serif; } .animate-fade-in { animation: fadeIn 0.3s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+        
+        <header className="hidden md:flex bg-card/80 backdrop-blur-lg border-b border-border sticky top-0 z-10">
+          <nav className="container mx-auto px-6 py-3 flex justify-between items-center max-w-6xl">
+            <div className="flex items-center gap-2">
+              <BrainCircuit className="text-primary" />
+              <h1 className="text-xl font-bold text-foreground">Clip & Review</h1>
+            </div>
+            <div className="flex items-center gap-6">
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-20" />
+            </div>
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-9 rounded-full" />
+            </div>
+          </nav>
+        </header>
+
+        <main className="container mx-auto px-4 sm:px-6 py-8 max-w-6xl md:pb-16">
+          <DashboardSkeleton />
+        </main>
+
+        <footer className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border p-2 flex justify-around items-center z-10">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 w-20 rounded-lg" />
+          ))}
+        </footer>
+        <div className="h-24 md:hidden"></div>
       </div>
     );
   }
@@ -1765,7 +1851,7 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'add':
-        return <div>Add Insight Form placeholder</div>; // TODO: Implement AddInsightForm component
+        return <AddInsightView onAddInsight={handleAddInsight} onBack={() => setPage('dashboard')} />;
       case 'review':
         return <ReviewView insight={reviewingInsight} onUpdateInsight={handleUpdateInsight} onBack={() => setPage('dashboard')} />;
       case 'practice':
@@ -1780,6 +1866,28 @@ export default function App() {
   return (
     <div className="bg-background min-h-screen font-sans text-foreground">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap'); body { font-family: 'Inter', sans-serif; } .animate-fade-in { animation: fadeIn 0.3s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      
+      {/* Modal de confirmação de exclusão */}
+      <Modal
+        isOpen={deleteConfirmation.isOpen}
+        onClose={cancelDeleteInsight}
+        title="Confirmar Exclusão"
+        onConfirm={confirmDeleteInsight}
+        confirmText="Deletar"
+        cancelText="Cancelar"
+      >
+        <div className="space-y-3">
+          <p>Tem certeza que deseja deletar este insight?</p>
+          <div className="p-3 bg-muted rounded-lg border-l-4 border-destructive">
+            <p className="text-sm text-muted-foreground font-medium">
+              "{deleteConfirmation.insightContent}"
+            </p>
+          </div>
+          <p className="text-sm text-destructive font-medium">
+            ⚠️ Esta ação não pode ser desfeita.
+          </p>
+        </div>
+      </Modal>
       
       <header className="hidden md:flex bg-card/80 backdrop-blur-lg border-b border-border sticky top-0 z-10">
         <nav className="container mx-auto px-6 py-3 flex justify-between items-center max-w-6xl">
